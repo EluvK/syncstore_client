@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:result_dart/result_dart.dart';
 import 'token_storage.dart';
-import 'auth_service.dart';
-import 'exceptions.dart';
+import 'client.dart';
+import 'errors.dart';
 
 /// AuthInterceptor automatically attaches Authorization header and
 /// retries requests when access token expired by running refresh once.
@@ -23,19 +24,32 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
-    try {
-      final token = await _storage.getAccessToken();
-      if (token != null) {
-        options.headers['Authorization'] = 'Bearer $token';
-      }
-    } catch (_) {
-      // ignore storage errors for now
+    if (options.extra['skipAuthInterceptor'] == true) {
+      // skip adding auth header
+      handler.next(options);
+      return;
     }
-    handler.next(options);
+
+    final String? token = await _storage.getAccessToken();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+      handler.next(options);
+    } else {
+      // no access token available, should cancel the request
+      handler.reject(
+        DioException(requestOptions: options, error: ApiError.loginRequired),
+      );
+    }
   }
 
   @override
-  void onError(DioError err, ErrorInterceptorHandler handler) async {
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    // auth request should not trigger refresh
+    if (err.requestOptions.extra['skipAuthInterceptor'] == true) {
+      handler.next(err);
+      return;
+    }
+
     final status = err.response?.statusCode;
     // only attempt refresh on 401 and for non-retried requests
     final requestOptions = err.requestOptions;
@@ -53,7 +67,7 @@ class AuthInterceptor extends Interceptor {
           }
           final opts = Options(
             method: requestOptions.method,
-            headers: Map<String, dynamic>.from(requestOptions.headers ?? {})..['Authorization'] = 'Bearer $newToken',
+            headers: Map<String, dynamic>.from(requestOptions.headers)..['Authorization'] = 'Bearer $newToken',
           );
           final cloneReq = await _authService.dio.request(
             requestOptions.path,
@@ -69,12 +83,13 @@ class AuthInterceptor extends Interceptor {
           // refresh failed: clear storage and raise AuthException
           await _storage.clear();
           handler.next(
-              DioError(requestOptions: requestOptions, error: AuthException('Token refresh failed'), type: err.type));
+            DioException(requestOptions: requestOptions, error: ApiError.loginRequired),
+          );
           return;
         }
       } catch (e) {
         await _storage.clear();
-        handler.next(DioError(requestOptions: requestOptions, error: AuthException('Token refresh failed: $e')));
+        handler.next(DioException(requestOptions: requestOptions, error: ApiError.loginRequired));
         return;
       }
     }
@@ -89,7 +104,7 @@ class AuthInterceptor extends Interceptor {
     }
     _refreshCompleter = Completer<bool>();
     try {
-      final ok = await _authService.refresh();
+      final ok = await _authService.refresh().getOrElse((_) => false);
       _refreshCompleter!.complete(ok);
       return ok;
     } catch (e) {

@@ -3,11 +3,12 @@ import 'package:syncstore_client/syncstore_client.dart';
 
 void main() async {
   final storage = InMemoryTokenStorage();
-  final client = SyncStoreClient(baseUrl: 'http://localhost:7878/api', tokenStorage: storage);
+  final client = SyncStoreClient(baseUrl: 'http://localhost:1011/api', tokenStorage: storage);
 
   try {
     // login
     await client.login('alice', 'password');
+    print('login successful');
 
     // list repos, here we treat each item as raw Map
     final list = await client.list<Map<String, dynamic>>(
