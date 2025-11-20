@@ -1,5 +1,3 @@
-import 'package:result_dart/result_dart.dart';
-
 enum ApiError {
   // 403 forbidden
   permissionDenied,
@@ -13,4 +11,17 @@ enum ApiError {
   unknown,
 }
 
-typedef ApiResult<T extends Object> = AsyncResultDart<T, ApiError>;
+class ApiException implements Exception {
+  final ApiError error;
+  final String? message;
+
+  ApiException(this.error, [this.message]);
+
+  @override
+  String toString() {
+    if (message != null) {
+      return 'ApiException: $error, message: $message';
+    }
+    return 'ApiException: $error';
+  }
+}

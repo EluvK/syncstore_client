@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:result_dart/result_dart.dart';
 import 'auth_interceptor.dart';
 import 'token_storage.dart';
 import 'models.dart';
@@ -28,27 +27,30 @@ class SyncStoreClient {
   }
 
   // Authentication helpers
-  Future<void> login(String username, String password) async {
-    await authService.login(username, password);
+  Future<bool> login(String username, String password) async {
+    return await authService.login(username, password);
   }
 
-  Future<void> logout() async {
+  Future<bool> logout() async {
+    // Just clear tokens, todo might need to call server logout endpoint in future
     await tokenStorage.clear();
+    return true;
   }
 
-  /// Generic create: returns the raw response mapped to T using fromMap.
-  Future<T> create<T>(
-      String namespace, String collection, Map<String, dynamic> body, T Function(Map<String, dynamic>) fromMap) async {
+  /// create new data, returns meta id if successful
+  Future<String> create(String namespace, String collection, Map<String, dynamic> body) async {
     try {
       final resp = await _dio.post('/data/$namespace/$collection', data: body);
-      final data = resp.data as Map<String, dynamic>;
-      return fromMap(data);
+      final String data = resp.data;
+      return data;
     } on DioException catch (e) {
       throw _wrapDioException(e);
     }
   }
 
-  Future<T> get<T>(String namespace, String collection, String id, T Function(Map<String, dynamic>) fromMap) async {
+  /// get data by id
+  Future<T> get<T extends Object>(
+      String namespace, String collection, String id, T Function(Map<String, dynamic>) fromMap) async {
     try {
       final resp = await _dio.get('/data/$namespace/$collection/$id');
       final data = resp.data as Map<String, dynamic>;
@@ -58,12 +60,13 @@ class SyncStoreClient {
     }
   }
 
-  Future<T> update<T>(String namespace, String collection, String id, Map<String, dynamic> body,
+  /// update data by id, return updated data id self.
+  Future<String> update<T>(String namespace, String collection, String id, Map<String, dynamic> body,
       T Function(Map<String, dynamic>) fromMap) async {
     try {
       final resp = await _dio.post('/data/$namespace/$collection/$id', data: body);
-      final data = resp.data as Map<String, dynamic>;
-      return fromMap(data);
+      final String data = resp.data;
+      return data;
     } on DioException catch (e) {
       throw _wrapDioException(e);
     }
@@ -72,6 +75,7 @@ class SyncStoreClient {
   Future<void> delete(String namespace, String collection, String id) async {
     try {
       await _dio.delete('/data/$namespace/$collection/$id');
+      return;
     } on DioException catch (e) {
       throw _wrapDioException(e);
     }
@@ -112,7 +116,7 @@ class AuthService {
 
   /// Login with username & password. On success store tokens.
   /// Returns map with raw response if needed.
-  ApiResult<bool> login(String username, String password) async {
+  Future<bool> login(String username, String password) async {
     try {
       final resp = await dio.post(
         '/auth/name-login',
@@ -121,17 +125,17 @@ class AuthService {
       );
       final data = _normalizeResp(resp);
       _persistTokens(data);
-      return Success(true);
+      return true;
     } on DioException catch (e) {
-      return Failure(_wrapDioException(e));
+      throw _wrapDioException(e);
     }
   }
 
   /// Refresh tokens using refresh token. Returns true if refreshed.
-  ApiResult<bool> refresh() async {
+  Future<bool> refresh() async {
     final refreshToken = await _storage.getRefreshToken();
     if (refreshToken == null) {
-      return Failure(ApiError.loginRequired);
+      throw ApiException(ApiError.loginRequired);
     }
     try {
       final resp = await dio.post(
@@ -141,9 +145,9 @@ class AuthService {
       );
       final data = _normalizeResp(resp);
       _persistTokens(data);
-      return Success(true);
+      return true;
     } on DioException catch (e) {
-      return Failure(_wrapDioException(e));
+      throw _wrapDioException(e);
     }
   }
 
@@ -183,22 +187,32 @@ class AuthService {
   }
 }
 
-ApiError _wrapDioException(DioException e) {
+ApiException _wrapDioException(DioException e) {
   if (e.type == DioExceptionType.connectionTimeout ||
       e.type == DioExceptionType.receiveTimeout ||
       e.type == DioExceptionType.sendTimeout) {
-    return ApiError.networkError;
+    return ApiException(ApiError.networkError);
   }
   if (e.type == DioExceptionType.unknown && e.error is ApiError) {
-    return e.error as ApiError;
+    return ApiException(e.error as ApiError);
   }
   if (e.response != null) {
     final status = e.response!.statusCode ?? 0;
     final data = e.response!.data;
     print('Error with response data: $data');
-    if (status == 401) return ApiError.loginRequired;
-    if (status == 403) return ApiError.permissionDenied;
-    if (status == 400) return ApiError.validationError;
+    if (status == 401) return ApiException(ApiError.loginRequired);
+    if (status == 403) return ApiException(ApiError.permissionDenied);
+    if (status == 400) return ApiException(ApiError.validationError);
   }
-  return ApiError.unknown;
+  return ApiException(ApiError.unknown);
+}
+
+// wrap multi API calls.
+Future<T> perform<T>(Future<T> Function() f) async {
+  try {
+    final result = await f();
+    return result;
+  } on DioException catch (e) {
+    throw _wrapDioException(e);
+  }
 }

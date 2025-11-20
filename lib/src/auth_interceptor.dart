@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:result_dart/result_dart.dart';
 import 'token_storage.dart';
 import 'client.dart';
 import 'errors.dart';
@@ -104,7 +103,7 @@ class AuthInterceptor extends Interceptor {
     }
     _refreshCompleter = Completer<bool>();
     try {
-      final ok = await _authService.refresh().getOrElse((_) => false);
+      final ok = await _authService.refresh();
       _refreshCompleter!.complete(ok);
       return ok;
     } catch (e) {
