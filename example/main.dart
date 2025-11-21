@@ -12,12 +12,7 @@ void main() async {
       // logged in
       await client.login('test', 'password');
       print('login successful');
-      final list = await client.list<Repo>(
-        'xbb',
-        'repo',
-        fromJson: (m) => Repo.fromJson(m),
-        limit: 10,
-      );
+      final list = await client.list<Repo>('xbb', 'repo', fromJson: Repo.fromJson, limit: 10);
 
       print('got ${list.items.length} repos, next marker: ${list.pageInfo.nextMarker}');
       for (DataItem<Repo> item in list.items) {

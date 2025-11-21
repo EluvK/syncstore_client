@@ -4,10 +4,6 @@ import 'token_storage.dart';
 import 'models.dart';
 import 'errors.dart';
 
-/// SyncStoreClient: minimal, generic CRUD client.
-///
-/// - baseUrl should point to server API root, e.g. http://localhost:7878/api
-/// - tokenStorage: store for tokens
 class SyncStoreClient {
   final Dio _dio;
   final TokenStorage tokenStorage;
@@ -26,9 +22,8 @@ class SyncStoreClient {
     return SyncStoreClient._(client, tokenStorage, authSrv);
   }
 
-  // Authentication helpers
-  Future<bool> login(String username, String password) async {
-    return await authService.login(username, password);
+  Future<bool> login(String username, String password) {
+    return authService.login(username, password);
   }
 
   Future<bool> logout() async {
@@ -37,48 +32,35 @@ class SyncStoreClient {
     return true;
   }
 
-  /// create new data, returns meta id if successful
-  Future<String> create(String namespace, String collection, Map<String, dynamic> body) async {
-    try {
+  /// create new data, returns meta id
+  Future<String> create(String namespace, String collection, Map<String, dynamic> body) {
+    return perform(() async {
       final resp = await _dio.post('/data/$namespace/$collection', data: body);
-      final String data = resp.data;
-      return data;
-    } on DioException catch (e) {
-      throw _wrapDioException(e);
-    }
+      return resp.data as String;
+    });
   }
 
   /// get data by id
   Future<T> get<T extends Object>(
-      String namespace, String collection, String id, T Function(Map<String, dynamic>) from_json) async {
-    try {
+      String namespace, String collection, String id, T Function(Map<String, dynamic>) fromJson) {
+    return perform(() async {
       final resp = await _dio.get('/data/$namespace/$collection/$id');
-      final data = resp.data as Map<String, dynamic>;
-      return from_json(data);
-    } on DioException catch (e) {
-      throw _wrapDioException(e);
-    }
+      return fromJson(resp.data as Map<String, dynamic>);
+    });
   }
 
-  /// update data by id, return updated data id self.
-  Future<String> update<T>(String namespace, String collection, String id, Map<String, dynamic> body,
-      T Function(Map<String, dynamic>) from_json) async {
-    try {
+  /// update data by id
+  Future<String> update(String namespace, String collection, String id, Map<String, dynamic> body) {
+    return perform(() async {
       final resp = await _dio.post('/data/$namespace/$collection/$id', data: body);
-      final String data = resp.data;
-      return data;
-    } on DioException catch (e) {
-      throw _wrapDioException(e);
-    }
+      return resp.data as String;
+    });
   }
 
-  Future<void> delete(String namespace, String collection, String id) async {
-    try {
+  Future<void> delete(String namespace, String collection, String id) {
+    return perform(() async {
       await _dio.delete('/data/$namespace/$collection/$id');
-      return;
-    } on DioException catch (e) {
-      throw _wrapDioException(e);
-    }
+    });
   }
 
   /// list with optional parentId, marker, limit
@@ -89,35 +71,32 @@ class SyncStoreClient {
     String? marker,
     int limit = 50,
     required T Function(Map<String, dynamic>) fromJson,
-  }) async {
-    try {
-      final query = <String, dynamic>{};
-      if (parentId != null) query['parent_id'] = parentId;
-      if (marker != null) query['marker'] = marker;
-      query['limit'] = limit;
+  }) {
+    return perform(() async {
+      final query = <String, dynamic>{
+        if (parentId != null) 'parent_id': parentId,
+        if (marker != null) 'marker': marker,
+        'limit': limit,
+      };
+
       final resp = await _dio.get('/data/$namespace/$collection', queryParameters: query);
       final data = resp.data as Map<String, dynamic>;
-      return ListResponse<T>.fromJson(data, (json) => fromJson(json as Map<String, dynamic>));
-    } on DioException catch (e) {
-      throw _wrapDioException(e);
-    }
+
+      final fromJsonT = (Object? json) => fromJson(json as Map<String, dynamic>);
+
+      return ListResponse<T>.fromJson(data, fromJsonT);
+    });
   }
 }
 
-/// AuthService: handles login / refresh / register.
-/// It knows the auth endpoints and persists tokens into TokenStorage.
-///
-/// Assumes server paths (as discussed): POST /api/auth/name-login, POST /api/auth/refresh
 class AuthService {
   final Dio dio;
   final TokenStorage _storage;
 
   AuthService(this.dio, this._storage);
 
-  /// Login with username & password. On success store tokens.
-  /// Returns map with raw response if needed.
-  Future<bool> login(String username, String password) async {
-    try {
+  Future<bool> login(String username, String password) {
+    return perform(() async {
       final resp = await dio.post(
         '/auth/name-login',
         data: {'username': username, 'password': password},
@@ -126,18 +105,16 @@ class AuthService {
       final data = _normalizeResp(resp);
       _persistTokens(data);
       return true;
-    } on DioException catch (e) {
-      throw _wrapDioException(e);
-    }
+    });
   }
 
-  /// Refresh tokens using refresh token. Returns true if refreshed.
   Future<bool> refresh() async {
     final refreshToken = await _storage.getRefreshToken();
     if (refreshToken == null) {
       throw ApiException(ApiError.loginRequired);
     }
-    try {
+
+    return perform(() async {
       final resp = await dio.post(
         '/auth/refresh',
         data: {'refresh_token': refreshToken},
@@ -146,43 +123,21 @@ class AuthService {
       final data = _normalizeResp(resp);
       _persistTokens(data);
       return true;
-    } on DioException catch (e) {
-      throw _wrapDioException(e);
-    }
+    });
   }
-
-  // /// Optional register helper for admin usage
-  // Future<void> register(String username, String password) async {
-  //   try {
-  //     await dio.post(
-  //       '/admin/register',
-  //       data: {'username': username, 'password': password},
-  //       options: Options(extra: {'skipAuthInterceptor': true}),
-  //     );
-  //   } on DioException catch (e) {
-  //     throw _wrapDioException(e);
-  //   }
-  // }
 
   void _persistTokens(Map<String, dynamic> data) {
     final access = data['access_token'] as String?;
     final refresh = data['refresh_token'] as String?;
-    // server may send expiry seconds or expiry timestamp
-    // DateTime? accessExpiry;
-    // if (data.containsKey('expires_in')) {
-    //   final expires = data['expires_in'];
-    //   if (expires is int) accessExpiry = DateTime.now().add(Duration(seconds: expires));
-    // }
-    if (access != null) {
-      _storage.setAccessToken(access);
-    }
-    if (refresh != null) {
-      _storage.setRefreshToken(refresh);
-    }
+
+    if (access != null) _storage.setAccessToken(access);
+    if (refresh != null) _storage.setRefreshToken(refresh);
   }
 
   Map<String, dynamic> _normalizeResp(Response resp) {
-    if (resp.data is Map<String, dynamic>) return resp.data as Map<String, dynamic>;
+    if (resp.data is Map<String, dynamic>) {
+      return resp.data as Map<String, dynamic>;
+    }
     return {'raw': resp.data};
   }
 }
@@ -207,11 +162,10 @@ ApiException _wrapDioException(DioException e) {
   return ApiException(ApiError.unknown);
 }
 
-// wrap multi API calls.
+/// Universal wrapper
 Future<T> perform<T>(Future<T> Function() f) async {
   try {
-    final result = await f();
-    return result;
+    return await f();
   } on DioException catch (e) {
     throw _wrapDioException(e);
   }
