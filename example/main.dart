@@ -14,18 +14,34 @@ void main() async {
       print('login successful');
       final list = await client.list<Repo>('xbb', 'repo', fromJson: Repo.fromJson, limit: 10);
 
+      // list repos
       print('got ${list.items.length} repos, next marker: ${list.pageInfo.nextMarker}');
       for (DataItem<Repo> item in list.items) {
         print(item.toJson((Repo r) => r.toJson()));
       }
 
+      // get specific repo
+      if (list.items.isNotEmpty) {
+        final firstRepoId = list.items.first.id;
+        final DataItem<Repo> repoItem = await client.get<Repo>('xbb', 'repo', firstRepoId, Repo.fromJson);
+        print('fetched repo by id: ${repoItem.toJson((Repo r) => r.toJson())}');
+      }
+
+      // delete repos
+      for (DataItem<Repo> item in list.items) {
+        await client.delete('xbb', 'repo', item.id);
+        print('deleted repo: ${item.id}');
+      }
+
       // create a repo
-      final newId = await client.create(
-        'xbb',
-        'repo',
-        {'name': 'client-demo', 'status': 'normal'},
-      );
+      final newRepo = Repo(name: 'client-demo', status: 'normal');
+      final newId = await client.create('xbb', 'repo', newRepo.toJson());
       print('created: $newId');
+
+      // update the repo
+      newRepo.name = 'client-updated-name';
+      final updatedId = await client.update('xbb', 'repo', newId, newRepo.toJson());
+      print('updated: $updatedId');
     });
   } on ApiException catch (e) {
     print('Error: ${e.error}, message: ${e.message}');

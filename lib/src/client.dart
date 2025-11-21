@@ -41,11 +41,12 @@ class SyncStoreClient {
   }
 
   /// get data by id
-  Future<T> get<T extends Object>(
+  Future<DataItem<T>> get<T extends Object>(
       String namespace, String collection, String id, T Function(Map<String, dynamic>) fromJson) {
     return perform(() async {
       final resp = await _dio.get('/data/$namespace/$collection/$id');
-      return fromJson(resp.data as Map<String, dynamic>);
+      final fromJsonT = (Object? json) => fromJson(json as Map<String, dynamic>);
+      return DataItem<T>.fromJson(resp.data, fromJsonT);
     });
   }
 
@@ -155,9 +156,9 @@ ApiException _wrapDioException(DioException e) {
     final status = e.response!.statusCode ?? 0;
     final data = e.response!.data;
     print('Error with response data: $data');
-    if (status == 401) return ApiException(ApiError.loginRequired);
-    if (status == 403) return ApiException(ApiError.permissionDenied);
-    if (status == 400) return ApiException(ApiError.validationError);
+    if (status == 401) return ApiException(ApiError.loginRequired, data.toString());
+    if (status == 403) return ApiException(ApiError.permissionDenied, data.toString());
+    if (status == 400) return ApiException(ApiError.validationError, data.toString());
   }
   return ApiException(ApiError.unknown);
 }
