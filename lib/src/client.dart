@@ -50,11 +50,11 @@ class SyncStoreClient {
 
   /// get data by id
   Future<T> get<T extends Object>(
-      String namespace, String collection, String id, T Function(Map<String, dynamic>) fromMap) async {
+      String namespace, String collection, String id, T Function(Map<String, dynamic>) from_json) async {
     try {
       final resp = await _dio.get('/data/$namespace/$collection/$id');
       final data = resp.data as Map<String, dynamic>;
-      return fromMap(data);
+      return from_json(data);
     } on DioException catch (e) {
       throw _wrapDioException(e);
     }
@@ -62,7 +62,7 @@ class SyncStoreClient {
 
   /// update data by id, return updated data id self.
   Future<String> update<T>(String namespace, String collection, String id, Map<String, dynamic> body,
-      T Function(Map<String, dynamic>) fromMap) async {
+      T Function(Map<String, dynamic>) from_json) async {
     try {
       final resp = await _dio.post('/data/$namespace/$collection/$id', data: body);
       final String data = resp.data;
@@ -88,7 +88,7 @@ class SyncStoreClient {
     String? parentId,
     String? marker,
     int limit = 50,
-    required T Function(Map<String, dynamic>) fromMap,
+    required T Function(Map<String, dynamic>) fromJson,
   }) async {
     try {
       final query = <String, dynamic>{};
@@ -97,7 +97,7 @@ class SyncStoreClient {
       query['limit'] = limit;
       final resp = await _dio.get('/data/$namespace/$collection', queryParameters: query);
       final data = resp.data as Map<String, dynamic>;
-      return ListResponse.fromMap(data, fromMap);
+      return ListResponse<T>.fromJson(data, (json) => fromJson(json as Map<String, dynamic>));
     } on DioException catch (e) {
       throw _wrapDioException(e);
     }
