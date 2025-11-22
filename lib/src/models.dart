@@ -2,8 +2,31 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'models.g.dart';
 
-/// Core models used by the client.
-/// DataItem<T> is generic: T is the typed body that user will provide/parse.
+// --- UserProfile ---
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class UserProfile {
+  final String userId;
+  final String name;
+  final String? avatarUrl;
+
+  UserProfile({required this.userId, required this.name, this.avatarUrl});
+  factory UserProfile.fromJson(Map<String, dynamic> json) => _$UserProfileFromJson(json);
+  Map<String, dynamic> toJson() => _$UserProfileToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class UpdateUserProfileRequest {
+  final String? name;
+  final String? password;
+  final String? avatarUrl;
+
+  UpdateUserProfileRequest({this.name, this.password, this.avatarUrl});
+  factory UpdateUserProfileRequest.fromJson(Map<String, dynamic> json) => _$UpdateUserProfileRequestFromJson(json);
+  Map<String, dynamic> toJson() => _$UpdateUserProfileRequestToJson(this);
+}
+
+// --- Data Models ---
 
 @JsonSerializable(fieldRename: FieldRename.snake, genericArgumentFactories: true)
 class DataItem<T> {

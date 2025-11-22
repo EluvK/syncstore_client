@@ -6,12 +6,6 @@ part of 'main.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
-Repo _$RepoFromJson(Map<String, dynamic> json) => Repo(
-      name: json['name'] as String,
-      status: json['status'] as String,
-    );
+Repo _$RepoFromJson(Map<String, dynamic> json) => Repo(name: json['name'] as String, status: json['status'] as String);
 
-Map<String, dynamic> _$RepoToJson(Repo instance) => <String, dynamic>{
-      'name': instance.name,
-      'status': instance.status,
-    };
+Map<String, dynamic> _$RepoToJson(Repo instance) => <String, dynamic>{'name': instance.name, 'status': instance.status};

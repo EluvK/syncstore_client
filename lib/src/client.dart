@@ -11,19 +11,18 @@ class SyncStoreClient {
 
   SyncStoreClient._(this._dio, this.tokenStorage, this.authService);
 
-  factory SyncStoreClient({
-    required String baseUrl,
-    required TokenStorage tokenStorage,
-    Dio? dio,
-  }) {
+  factory SyncStoreClient({required String baseUrl, required TokenStorage tokenStorage, Dio? dio}) {
     final client = dio ?? Dio(BaseOptions(baseUrl: baseUrl));
     final authSrv = AuthService(client, tokenStorage);
     client.interceptors.add(AuthInterceptor(tokenStorage, authSrv));
     return SyncStoreClient._(client, tokenStorage, authSrv);
   }
 
-  Future<bool> login(String username, String password) {
-    return authService.login(username, password);
+  Future<UserProfile> login(String username, String password) {
+    return perform(() async {
+      final userId = await authService.login(username, password);
+      return getProfile(userId);
+    });
   }
 
   Future<bool> logout() async {
@@ -31,6 +30,31 @@ class SyncStoreClient {
     await tokenStorage.clear();
     return true;
   }
+
+  Future<bool> checkHealth() {
+    return perform(() async {
+      final resp = await _dio.get('/health', options: Options(extra: {'skipAuthInterceptor': true}));
+      return resp.statusCode == 200;
+    });
+  }
+
+  Future<UserProfile> getProfile(String userId) {
+    return perform(() async {
+      final resp = await _dio.get('/user/$userId');
+      final data = resp.data as Map<String, dynamic>;
+      return UserProfile.fromJson(data);
+    });
+  }
+
+  Future<UserProfile> updateProfile(String userId, UserProfile profile) {
+    return perform(() async {
+      final resp = await _dio.post('/user/${userId}', data: profile.toJson());
+      final data = resp.data as Map<String, dynamic>;
+      return UserProfile.fromJson(data);
+    });
+  }
+
+  /// --- Data APIs ---
 
   /// create new data, returns meta id
   Future<String> create(String namespace, String collection, Map<String, dynamic> body) {
@@ -42,7 +66,11 @@ class SyncStoreClient {
 
   /// get data by id
   Future<DataItem<T>> get<T extends Object>(
-      String namespace, String collection, String id, T Function(Map<String, dynamic>) fromJson) {
+    String namespace,
+    String collection,
+    String id,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
     return perform(() async {
       final resp = await _dio.get('/data/$namespace/$collection/$id');
       final fromJsonT = (Object? json) => fromJson(json as Map<String, dynamic>);
@@ -96,7 +124,7 @@ class AuthService {
 
   AuthService(this.dio, this._storage);
 
-  Future<bool> login(String username, String password) {
+  Future<String> login(String username, String password) {
     return perform(() async {
       final resp = await dio.post(
         '/auth/name-login',
@@ -105,7 +133,8 @@ class AuthService {
       );
       final data = _normalizeResp(resp);
       _persistTokens(data);
-      return true;
+      final user_id = data['user_id'] as String;
+      return user_id;
     });
   }
 
