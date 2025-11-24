@@ -4,3 +4,5 @@ environment:
   sdk: ^3.10.0
 workspace:
   - syncstore_client
+  - sync_annotation
+  - sync_generator
