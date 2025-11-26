@@ -38,6 +38,7 @@ DataItem<T> _$DataItemFromJson<T>(Map<String, dynamic> json, T Function(Object? 
   json['parent_id'] as String?,
   json['unique'] as String?,
   body: fromJsonT(json['body']),
+  syncStatus: $enumDecodeNullable(_$SyncStatusEnumMap, json['sync_status']) ?? SyncStatus.synced,
 );
 
 Map<String, dynamic> _$DataItemToJson<T>(DataItem<T> instance, Object? Function(T value) toJsonT) => <String, dynamic>{
@@ -47,8 +48,11 @@ Map<String, dynamic> _$DataItemToJson<T>(DataItem<T> instance, Object? Function(
   'owner': instance.owner,
   'parent_id': instance.parentId,
   'unique': instance.unique,
+  'sync_status': _$SyncStatusEnumMap[instance.syncStatus]!,
   'body': toJsonT(instance.body),
 };
+
+const _$SyncStatusEnumMap = {SyncStatus.synced: 'synced', SyncStatus.pending: 'pending', SyncStatus.failed: 'failed'};
 
 PageInfo _$PageInfoFromJson(Map<String, dynamic> json) =>
     PageInfo(count: (json['count'] as num).toInt(), nextMarker: json['next_marker'] as String?);

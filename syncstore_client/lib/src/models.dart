@@ -28,6 +28,8 @@ class UpdateUserProfileRequest {
 
 // --- Data Models ---
 
+enum SyncStatus { synced, pending, failed }
+
 @JsonSerializable(fieldRename: FieldRename.snake, genericArgumentFactories: true)
 class DataItem<T> {
   final String id;
@@ -37,9 +39,38 @@ class DataItem<T> {
   final String? parentId;
   final String? unique;
 
+  // this field is client-side only, but since nothings happened even we do send it to server
+  // it's ok to keep it here to make this usage easier, less type gymnastics.
+  final SyncStatus syncStatus;
+
   final T body;
 
-  DataItem(this.id, this.createdAt, this.updatedAt, this.owner, this.parentId, this.unique, {required this.body});
+  DataItem(
+    this.id,
+    this.createdAt,
+    this.updatedAt,
+    this.owner,
+    this.parentId,
+    this.unique, {
+    required this.body,
+    // the default is synced, as we usually fetch data from server, which is definitely ''synced''
+    this.syncStatus = SyncStatus.synced,
+  });
+
+  // ? what's the design philosophy here?
+  DataItem<T> updatedBody(T newBody) {
+    return DataItem<T>(
+      id,
+      createdAt,
+      DateTime.now().toUtc(),
+      owner,
+      parentId,
+      unique,
+      body: newBody,
+      // todo
+      syncStatus: SyncStatus.pending,
+    );
+  }
 
   factory DataItem.fromJson(Map<String, dynamic> json, T Function(Object?) fromJsonT) =>
       _$DataItemFromJson(json, fromJsonT);

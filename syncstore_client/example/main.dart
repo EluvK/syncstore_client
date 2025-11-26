@@ -1,65 +1,126 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:get/get.dart';
 import 'package:path/path.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:syncstore_client/syncstore_client.dart';
+import 'package:sync_annotation/sync_annotation.dart';
 
 part 'main.g.dart';
+
+Future<void> debug() async {
+  // print('Debugging...');
+
+  // final RepoDataItem? item = await RepoRepository().getFromLocalDb('6664c918-dd2e-47b6-b82c-a2add61ac702');
+  // if (item != null) {
+  //   print('Fetched from local db: ${item.toJson((Repo r) => r.toJson())}');
+  //   print('updated at: ${item.updatedAt.toIso8601String()}');
+  // } else {
+  //   print('No such item in local db.');
+  // }
+
+  // print('Debugging done.');
+}
 
 void main() async {
   final storage = InMemoryTokenStorage();
   final client = SyncStoreClient(baseUrl: 'http://localhost:1011/api', tokenStorage: storage);
-
   try {
-    final res = await perform(() async {
-      // logged in
-      await client.login('test', 'password');
-      print('login successful');
-      final list = await client.list<Repo>('xbb', 'repo', fromJson: Repo.fromJson, limit: 10);
-
-      // list repos
-      print('got ${list.items.length} repos, next marker: ${list.pageInfo.nextMarker}');
-      for (DataItem<Repo> item in list.items) {
-        print(item.toJson((Repo r) => r.toJson()));
-      }
-
-      // get specific repo
-      if (list.items.isNotEmpty) {
-        final firstRepoId = list.items.first.id;
-        final DataItem<Repo> repoItem = await client.get<Repo>('xbb', 'repo', firstRepoId, Repo.fromJson);
-        print('fetched repo by id: ${repoItem.toJson((Repo r) => r.toJson())}');
-        await RepoRepository().addToLocalDb(repoItem);
-      }
-
-      // delete repos
-      for (DataItem<Repo> item in list.items) {
-        await client.delete('xbb', 'repo', item.id);
-        print('deleted repo: ${item.id}');
-      }
-
-      // create a repo
-      final newRepo = Repo(name: 'client-demo', status: 'normal');
-      final newId = await client.create('xbb', 'repo', newRepo.toJson());
-      print('created: $newId');
-
-      // update the repo
-      newRepo.name = 'client-updated-name';
-      final updatedId = await client.update('xbb', 'repo', newId, newRepo.toJson());
-      print('updated: $updatedId');
-    });
-  } on ApiException catch (e) {
-    print('Error: ${e.error}, message: ${e.message}');
+    await client.login('test', 'password');
+    print('Login successful');
+  } catch (e) {
+    print('Login failed: $e');
+    return;
   }
+
+  // local repos:
+  var currentRepos = await RepoRepository().listFromLocalDb();
+  print('1. Local repos count: ${currentRepos.length}');
+  for (DataItem<Repo> item in currentRepos) {
+    print(item.toJson((Repo r) => r.toJson()));
+  }
+
+  // try load from server and store to local db if not synced
+  try {
+    print('2. Syncing repos from server...');
+    final serverRepos = await client.list<Repo>('xbb', 'repo', fromJson: Repo.fromJson, limit: 50);
+    for (DataItem<Repo> item in serverRepos.items) {
+      final RepoDataItem? findLocal = currentRepos.firstWhereOrNull((e) => e.id == item.id);
+      if (findLocal == null || findLocal.updatedAt.isBefore(item.updatedAt)) {
+        print('  Remote data: ${item.toJson((Repo r) => r.toJson())}');
+        await RepoRepository().upsertToLocalDb(item);
+        print('  Synced repo && Update local db: ${item.id}');
+        // debug: fetch it see
+        final RepoDataItem? checkItem = await RepoRepository().getFromLocalDb(item.id);
+        print('  Checked from local db: ${checkItem?.toJson((Repo r) => r.toJson())}');
+      } else {
+        print('  Local repo is up-to-date: ${item.id}');
+      }
+    }
+  } catch (e) {
+    print('Failed to sync repos from server: $e');
+  }
+  await debug();
+
+  // try update one of the local repos (if any)
+  if (currentRepos.isNotEmpty) {
+    RepoDataItem firstRepo = currentRepos.first;
+    // todo not satisfied with this updated body API design
+    RepoDataItem newUpdatedRepo = firstRepo.updatedBody(
+      Repo(
+        description: 'Updated locally at ${DateTime.now().toIso8601String()}',
+        name: firstRepo.body.name,
+        status: firstRepo.body.status,
+      ),
+    );
+    await RepoRepository().updateToLocalDb(newUpdatedRepo);
+    print('3. Updated local repo: ${newUpdatedRepo.id}');
+    try {
+      await client.update('xbb', 'repo', newUpdatedRepo.id, newUpdatedRepo.body.toJson());
+      print('   Also updated on server: ${newUpdatedRepo.id}');
+    } catch (e) {
+      print('   Failed to update on server: $e');
+    }
+  }
+
+  await debug();
+  // try create a new one, then fetch from server and store to local db
+  // actually we need a temporary repo item, we can makeup the meta info and then override it after fetching from server
+  // which can be flagged by sync_status field
+  Repo newRepo = Repo(name: 'some-repo', status: 'normal', description: 'Created from client example');
+  String newLocalId = 'local-only-repo-id';
+  try {
+    newLocalId = await client.create('xbb', 'repo', newRepo.toJson());
+    print('4. Created new repo on server: $newLocalId');
+  } catch (e) {
+    print('Failed to create repo on server: $e');
+  }
+  RepoDataItem item = await client.get<Repo>('xbb', 'repo', newLocalId, Repo.fromJson);
+  print('Fetched newly created repo from server: ${item.toJson((Repo r) => r.toJson())}');
+  await RepoRepository().addToLocalDb(item);
+
+  await debug();
+  // try delete a repo at local and server
+  if (currentRepos.isNotEmpty) {
+    final toDelete = currentRepos.last;
+    try {
+      await client.delete('xbb', 'repo', toDelete.id);
+      print('5. Deleted repo on server: ${toDelete.id}');
+    } catch (e) {
+      print('Failed to delete repo on server: $e');
+    }
+    await RepoRepository().deleteFromLocalDb(toDelete.id);
+    print('   Also deleted from local db: ${toDelete.id}');
+  }
+
+  return;
 }
 
-abstract class TestDBBasic {
-  Future<Database> getDb();
-}
-
+@Repository(tableName: 'repo', db: TestDataBase)
 @JsonSerializable(includeIfNull: false)
-class Repo extends TestDBBasic {
+class Repo {
   String name;
   String status;
   String? description;
@@ -68,87 +129,6 @@ class Repo extends TestDBBasic {
 
   factory Repo.fromJson(Map<String, dynamic> json) => _$RepoFromJson(json);
   Map<String, dynamic> toJson() => _$RepoToJson(this);
-
-  @override
-  Future<Database> getDb() async {
-    return await TestDataBase().getDb();
-  }
-}
-
-extension SSRepo on Repo {
-  static String get tableName => 'repo';
-  static String get onCreateTableRepoSQL =>
-      '''
-        CREATE TABLE ${SSRepo.tableName} (
-          id TEXT PRIMARY KEY,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL,
-          owner TEXT NOT NULL,
-          parent_id TEXT,
-          "unique" TEXT,
-          body TEXT NOT NULL
-        )
-      ''';
-  static Future<Database> DB() async {
-    return await TestDataBase().getDb();
-  }
-}
-
-typedef RepoDataItem = DataItem<Repo>;
-
-class RepoRepository {
-  Future<void> addToLocalDb(RepoDataItem item) async {
-    final db = await SSRepo.DB();
-    await db.insert(SSRepo.tableName, item.toJson((Repo r) => json.encode(r.toJson())));
-  }
-
-  Future<RepoDataItem?> getFromLocalDb(String id) async {
-    final db = await SSRepo.DB();
-    final List<Map<String, dynamic>> maps = await db.query(SSRepo.tableName, where: 'id = ?', whereArgs: [id]);
-    if (maps.isNotEmpty) {
-      print('maps first: ${maps.first}');
-      return DataItem<Repo>.fromJson(maps.first, (jsonStr) => Repo.fromJson(json.decode(jsonStr as String)));
-    }
-    return null;
-  }
-
-  Future<List<RepoDataItem>> listFromLocalDb({String? parentId}) async {
-    final db = await SSRepo.DB();
-    final whereClauses = <String>[];
-    final whereArgs = <dynamic>[];
-    if (parentId != null) {
-      whereClauses.add('parent_id = ?');
-      whereArgs.add(parentId);
-    }
-    final whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
-    final List<Map<String, dynamic>> maps = await db.query(SSRepo.tableName, where: whereString, whereArgs: whereArgs);
-    return maps
-        .map((map) => DataItem<Repo>.fromJson(map, (jsonStr) => Repo.fromJson(json.decode(jsonStr as String))))
-        .toList();
-  }
-
-  Future<void> deleteFromLocalDb(String id) async {
-    final db = await SSRepo.DB();
-    await db.delete(SSRepo.tableName, where: 'id = ?', whereArgs: [id]);
-  }
-
-  Future<void> updateToLocalDb(RepoDataItem item) async {
-    final db = await SSRepo.DB();
-    await db.update(
-      SSRepo.tableName,
-      item.toJson((Repo r) => json.encode(r.toJson())),
-      where: 'id = ?',
-      whereArgs: [item.id],
-    );
-  }
-
-  Future<void> upsertToLocalDb(RepoDataItem item) async {
-    if (await getFromLocalDb(item.id) == null) {
-      await addToLocalDb(item);
-    } else {
-      await updateToLocalDb(item);
-    }
-  }
 }
 
 class TestDataBase {
@@ -168,7 +148,7 @@ class TestDataBase {
       options: OpenDatabaseOptions(
         version: 1,
         onCreate: (Database db, int version) async {
-          await db.execute(SSRepo.onCreateTableRepoSQL);
+          await db.execute(LocalStoreRepo.onCreateTableRepoSQL);
         },
       ),
     );
