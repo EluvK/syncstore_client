@@ -1,4 +1,5 @@
 import 'package:json_annotation/json_annotation.dart';
+import 'package:uuid/uuid.dart';
 
 part 'models.g.dart';
 
@@ -28,7 +29,7 @@ class UpdateUserProfileRequest {
 
 // --- Data Models ---
 
-enum SyncStatus { synced, pending, failed }
+enum SyncStatus { failed, deleted, pending, syncing, synced, archived }
 
 @JsonSerializable(fieldRename: FieldRename.snake, genericArgumentFactories: true)
 class DataItem<T> {
@@ -41,7 +42,7 @@ class DataItem<T> {
 
   // this field is client-side only, but since nothings happened even we do send it to server
   // it's ok to keep it here to make this usage easier, less type gymnastics.
-  final SyncStatus syncStatus;
+  SyncStatus syncStatus;
 
   final T body;
 
@@ -56,6 +57,12 @@ class DataItem<T> {
     // the default is synced, as we usually fetch data from server, which is definitely ''synced''
     this.syncStatus = SyncStatus.synced,
   });
+
+  factory DataItem.localNew(String owner, T body, {String? parentId, String? unique}) {
+    final id = Uuid().v4();
+    final now = DateTime.now().toUtc();
+    return DataItem<T>(id, now, now, owner, parentId, unique, body: body, syncStatus: SyncStatus.pending);
+  }
 
   // ? what's the design philosophy here?
   DataItem<T> updatedBody(T newBody) {
@@ -78,6 +85,20 @@ class DataItem<T> {
 }
 
 @JsonSerializable(fieldRename: FieldRename.snake)
+class DataItemSummary {
+  final String id;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String owner;
+  final String? parentId;
+  final String? unique;
+
+  DataItemSummary(this.id, this.createdAt, this.updatedAt, this.owner, this.parentId, this.unique);
+  factory DataItemSummary.fromJson(Map<String, dynamic> json) => _$DataItemSummaryFromJson(json);
+  Map<String, dynamic> toJson() => _$DataItemSummaryToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
 class PageInfo {
   final int count;
   final String? nextMarker;
@@ -88,14 +109,13 @@ class PageInfo {
   Map<String, dynamic> toJson() => _$PageInfoToJson(this);
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake, genericArgumentFactories: true)
-class ListResponse<T> {
-  final List<DataItem<T>> items;
+@JsonSerializable(fieldRename: FieldRename.snake)
+class ListResponse {
+  final List<DataItemSummary> items;
   final PageInfo pageInfo;
 
   ListResponse({required this.items, required this.pageInfo});
 
-  factory ListResponse.fromJson(Map<String, dynamic> json, T Function(Object?) fromJsonT) =>
-      _$ListResponseFromJson(json, fromJsonT);
-  Map<String, dynamic> toJson(Object? Function(T value) toJsonT) => _$ListResponseToJson(this, toJsonT);
+  factory ListResponse.fromJson(Map<String, dynamic> json) => _$ListResponseFromJson(json);
+  Map<String, dynamic> toJson() => _$ListResponseToJson(this);
 }

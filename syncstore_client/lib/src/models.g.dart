@@ -52,7 +52,32 @@ Map<String, dynamic> _$DataItemToJson<T>(DataItem<T> instance, Object? Function(
   'body': toJsonT(instance.body),
 };
 
-const _$SyncStatusEnumMap = {SyncStatus.synced: 'synced', SyncStatus.pending: 'pending', SyncStatus.failed: 'failed'};
+const _$SyncStatusEnumMap = {
+  SyncStatus.failed: 'failed',
+  SyncStatus.deleted: 'deleted',
+  SyncStatus.pending: 'pending',
+  SyncStatus.syncing: 'syncing',
+  SyncStatus.synced: 'synced',
+  SyncStatus.archived: 'archived',
+};
+
+DataItemSummary _$DataItemSummaryFromJson(Map<String, dynamic> json) => DataItemSummary(
+  json['id'] as String,
+  DateTime.parse(json['created_at'] as String),
+  DateTime.parse(json['updated_at'] as String),
+  json['owner'] as String,
+  json['parent_id'] as String?,
+  json['unique'] as String?,
+);
+
+Map<String, dynamic> _$DataItemSummaryToJson(DataItemSummary instance) => <String, dynamic>{
+  'id': instance.id,
+  'created_at': instance.createdAt.toIso8601String(),
+  'updated_at': instance.updatedAt.toIso8601String(),
+  'owner': instance.owner,
+  'parent_id': instance.parentId,
+  'unique': instance.unique,
+};
 
 PageInfo _$PageInfoFromJson(Map<String, dynamic> json) =>
     PageInfo(count: (json['count'] as num).toInt(), nextMarker: json['next_marker'] as String?);
@@ -62,16 +87,12 @@ Map<String, dynamic> _$PageInfoToJson(PageInfo instance) => <String, dynamic>{
   'next_marker': instance.nextMarker,
 };
 
-ListResponse<T> _$ListResponseFromJson<T>(Map<String, dynamic> json, T Function(Object? json) fromJsonT) =>
-    ListResponse<T>(
-      items: (json['items'] as List<dynamic>)
-          .map((e) => DataItem<T>.fromJson(e as Map<String, dynamic>, (value) => fromJsonT(value)))
-          .toList(),
-      pageInfo: PageInfo.fromJson(json['page_info'] as Map<String, dynamic>),
-    );
+ListResponse _$ListResponseFromJson(Map<String, dynamic> json) => ListResponse(
+  items: (json['items'] as List<dynamic>).map((e) => DataItemSummary.fromJson(e as Map<String, dynamic>)).toList(),
+  pageInfo: PageInfo.fromJson(json['page_info'] as Map<String, dynamic>),
+);
 
-Map<String, dynamic> _$ListResponseToJson<T>(ListResponse<T> instance, Object? Function(T value) toJsonT) =>
-    <String, dynamic>{
-      'items': instance.items.map((e) => e.toJson((value) => toJsonT(value))).toList(),
-      'page_info': instance.pageInfo,
-    };
+Map<String, dynamic> _$ListResponseToJson(ListResponse instance) => <String, dynamic>{
+  'items': instance.items,
+  'page_info': instance.pageInfo,
+};

@@ -8,6 +8,7 @@ class SyncStoreClient {
   final Dio _dio;
   final TokenStorage tokenStorage;
   final AuthService authService;
+  String? _userId;
 
   SyncStoreClient._(this._dio, this.tokenStorage, this.authService);
 
@@ -21,14 +22,23 @@ class SyncStoreClient {
   Future<UserProfile> login(String username, String password) {
     return perform(() async {
       final userId = await authService.login(username, password);
+      _userId = userId;
       return getProfile(userId);
     });
   }
 
   Future<bool> logout() async {
     // Just clear tokens, todo might need to call server logout endpoint in future
+    _userId = null;
     await tokenStorage.clear();
     return true;
+  }
+
+  String currentUserId() {
+    if (_userId == null) {
+      throw ApiException(ApiError.loginRequired);
+    }
+    return _userId!;
   }
 
   Future<bool> checkHealth() {
@@ -93,14 +103,7 @@ class SyncStoreClient {
   }
 
   /// list with optional parentId, marker, limit
-  Future<ListResponse<T>> list<T>(
-    String namespace,
-    String collection, {
-    String? parentId,
-    String? marker,
-    int limit = 50,
-    required T Function(Map<String, dynamic>) fromJson,
-  }) {
+  Future<ListResponse> list(String namespace, String collection, {String? parentId, String? marker, int limit = 50}) {
     return perform(() async {
       final query = <String, dynamic>{
         if (parentId != null) 'parent_id': parentId,
@@ -110,10 +113,7 @@ class SyncStoreClient {
 
       final resp = await _dio.get('/data/$namespace/$collection', queryParameters: query);
       final data = resp.data as Map<String, dynamic>;
-
-      final fromJsonT = (Object? json) => fromJson(json as Map<String, dynamic>);
-
-      return ListResponse<T>.fromJson(data, fromJsonT);
+      return ListResponse.fromJson(data);
     });
   }
 }
