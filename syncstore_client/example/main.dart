@@ -51,14 +51,14 @@ void main() async {
       description: 'Updated locally at ${DateTime.now().toIso8601String()}',
     );
     controller.updateData(secondRepoId, updatedData);
-    await Future.delayed(Duration(seconds: 2)); // wait for background sync to finish
+    // await Future.delayed(Duration(seconds: 2)); // wait for background sync to finish
   }
 
   await debug();
   print('2. Created new repo');
   Repo newRepo = Repo(name: 'some-repo', status: 'normal', description: 'Created from client example');
   controller.addData(newRepo);
-  await Future.delayed(Duration(seconds: 2)); // wait for background sync to finish
+  // await Future.delayed(Duration(seconds: 2)); // wait for background sync to finish
 
   await debug();
   // try delete a repo at local and server
@@ -66,14 +66,14 @@ void main() async {
     final toDelete = viewRepos.first;
     print('3. Deleted repo: ${toDelete.id}');
     controller.deleteData(toDelete.id);
-    await Future.delayed(Duration(seconds: 2)); // wait for background sync to finish
+    // await Future.delayed(Duration(seconds: 2)); // wait for background sync to finish
   }
   await debug();
 
   return;
 }
 
-@Repository(tableName: 'repo', db: TestDataBase)
+@Repository(collectionName: 'xbb', tableName: 'repo', db: TestDataBase)
 @JsonSerializable(includeIfNull: false)
 class Repo {
   String name;
@@ -86,170 +86,159 @@ class Repo {
   Map<String, dynamic> toJson() => _$RepoToJson(this);
 }
 
-class RepoController extends GetxController {
-  final SyncStoreClient client;
-  RepoController(this.client);
+// class _RepoSyncEngine {
+//   final SyncStoreClient client;
+//   _RepoSyncEngine(this.client);
 
-  final _repos = <RepoDataItem>[].obs;
+//   Future<RepoDataItem> create(RepoDataItem local) async {
+//     local.syncStatus = SyncStatus.syncing;
+//     await RepoRepository().addToLocalDb(local);
 
-  final Rx<String?> currentRepoId = Rx<String?>(null);
+//     final newId = await client.create('xbb', 'repo', local.body.toJson());
+//     final RepoDataItem createdItem = await client.get<Repo>('xbb', 'repo', newId, Repo.fromJson);
+//     createdItem.syncStatus = SyncStatus.archived;
 
-  @override
-  Future<void> onInit() async {
-    await rebuildLocal();
-    super.onInit();
-    _initialized = true;
-  }
+//     await RepoRepository().deleteFromLocalDb(local.id);
+//     await RepoRepository().addToLocalDb(createdItem);
+//     return createdItem;
+//   }
 
-  bool _initialized = false;
-  Future<void> ensureInitialization() async {
-    while (!_initialized) {
-      await onInit();
-    }
-    return;
-  }
+//   Future<RepoDataItem> update(RepoDataItem local) async {
+//     local.syncStatus = SyncStatus.syncing;
+//     await RepoRepository().updateToLocalDb(local);
+//     await client.update('xbb', 'repo', local.id, local.body.toJson());
+//     final RepoDataItem updatedItem = await client.get<Repo>('xbb', 'repo', local.id, Repo.fromJson);
+//     updatedItem.syncStatus = SyncStatus.archived;
+//     await RepoRepository().updateToLocalDb(updatedItem);
+//     return updatedItem;
+//   }
 
-  Future<void> rebuildLocal() async {
-    _repos.value = await RepoRepository().listFromLocalDb();
-  }
+//   void delete(String id) {
+//     RepoRepository().deleteFromLocalDb(id);
+//     try {
+//       client.delete('xbb', 'repo', id);
+//     } catch (e) {
+//       rethrow;
+//     }
+//   }
 
-  void onSelectRepo(String repoId) {
-    currentRepoId.value = repoId;
-  }
+//   Future<void> syncAll() async {
+//     try {
+//       var nextMarker = null;
+//       final serviceIds = <String>{};
+//       do {
+//         final ListResponse resp = await client.list('xbb', 'repo', limit: 50, marker: nextMarker);
+//         nextMarker = resp.pageInfo.nextMarker;
+//         for (var summary in resp.items) {
+//           serviceIds.add(summary.id);
+//           final RepoDataItem? localItem = await RepoRepository().getFromLocalDb(summary.id);
+//           if (localItem == null) {
+//             // new from server
+//             final RepoDataItem item = await client.get<Repo>('xbb', 'repo', summary.id, Repo.fromJson);
+//             await RepoRepository().addToLocalDb(item);
+//           } else if (localItem.updatedAt.isBefore(summary.updatedAt)) {
+//             // update local data.
+//             final RepoDataItem item = await client.get<Repo>('xbb', 'repo', summary.id, Repo.fromJson);
+//             await RepoRepository().updateToLocalDb(item);
+//           } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
+//             // local data is newer, need to sync to server
+//             localItem.syncStatus = SyncStatus.failed;
+//             await RepoRepository().updateToLocalDb(localItem);
+//           }
+//         }
+//       } while (nextMarker != null);
+//       // clean up local data that are deleted from server
+//       final localItems = await RepoRepository().listFromLocalDb();
+//       for (RepoDataItem localItem in localItems) {
+//         if (!serviceIds.contains(localItem.id)) {
+//           localItem.syncStatus = SyncStatus.deleted;
+//           await RepoRepository().updateToLocalDb(localItem);
+//         }
+//       }
+//     } catch (e) {
+//       // todo more error handling?
+//       rethrow;
+//     }
+//   }
+// }
 
-  List<RepoDataItem> onViewRepos(String? parent_id) {
-    if (parent_id == null) {
-      return _repos;
-    }
-    return _repos.where((item) => item.parentId == parent_id).toList();
-  }
+// class RepoController extends GetxController {
+//   final SyncStoreClient client;
+//   final _RepoSyncEngine _syncEngine;
+//   RepoController(this.client) : _syncEngine = _RepoSyncEngine(client);
 
-  Future<void> trySyncAll() async {
-    try {
-      var nextMarker = null;
-      final serviceIds = <String>{};
-      do {
-        final ListResponse resp = await client.list('xbb', 'repo', limit: 50, marker: nextMarker);
-        nextMarker = resp.pageInfo.nextMarker;
-        for (var summary in resp.items) {
-          serviceIds.add(summary.id);
-          final RepoDataItem? localItem = _repos.firstWhereOrNull((e) => e.id == summary.id);
-          if (localItem == null) {
-            // new from server
-            print('Found new repo from server: ${summary.id}');
-            final RepoDataItem item = await client.get<Repo>('xbb', 'repo', summary.id, Repo.fromJson);
-            await RepoRepository().addToLocalDb(item);
-            _repos.add(item);
-          } else if (localItem.updatedAt.isBefore(summary.updatedAt)) {
-            // update local data.
-            print('Found updated repo from server: ${summary.id}');
-            final index = _repos.indexWhere((e) => e.id == summary.id);
-            _repos[index].syncStatus = SyncStatus.syncing;
-            final RepoDataItem item = await client.get<Repo>('xbb', 'repo', summary.id, Repo.fromJson);
-            await RepoRepository().updateToLocalDb(item);
-            _repos[index] = item;
-          } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
-            // local data is newer, need to sync to server
-            print('Local repo ${summary.id} is newer than server, need to sync to server.');
-            localItem.syncStatus = SyncStatus.failed;
-          }
-        }
-      } while (nextMarker != null);
-      // clean up local data that are deleted from server
-      for (RepoDataItem localItem in _repos) {
-        if (!serviceIds.contains(localItem.id)) {
-          localItem.syncStatus = SyncStatus.deleted;
-          await RepoRepository().updateToLocalDb(localItem);
-        }
-      }
-    } catch (e) {
-      // todo more error handling
-      print('Failed to sync repos from server: $e');
-    }
-  }
+//   final RxList<RepoDataItem> _items = <RepoDataItem>[].obs;
+//   final Rx<String?> currentRepoId = Rx<String?>(null);
 
-  void addData(Repo newData) {
-    // generate a local uuid before successfully created on server
-    final owner = client.currentUserId();
-    final newItem = RepoDataItem.localNew(owner, newData);
-    _repos.add(newItem); // it's a temporary memory data, not even in local db yet.
-    _bgSyncNew(newItem); // async background sync to server
-  }
+//   @override
+//   Future<void> onInit() async {
+//     await rebuildLocal();
+//     super.onInit();
+//     _initialized = true;
+//   }
 
-  void updateData(String id, Repo updatedData) {
-    final index = _repos.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      final RepoDataItem oldItem = _repos[index];
-      // todo maybe rewrite this update body method...
-      final updatedItem = oldItem.updatedBody(updatedData);
-      _repos[index] = updatedItem;
-      _bgSyncUpdate(updatedItem);
-    } else {
-      print('[panic] No such repo with id $id to update');
-    }
-  }
+//   bool _initialized = false;
+//   Future<void> ensureInitialization() async {
+//     while (!_initialized) {
+//       await onInit();
+//     }
+//     return;
+//   }
 
-  void deleteData(String id) {
-    final index = _repos.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      _repos.removeAt(index);
-    }
-    _bgSyncDelete(id);
-  }
+//   Future<void> rebuildLocal() async {
+//     _items.value = await RepoRepository().listFromLocalDb();
+//   }
 
-  Future<void> _bgSyncNew(RepoDataItem newItem) async {
-    assert(newItem.syncStatus == SyncStatus.pending);
-    try {
-      newItem.syncStatus = SyncStatus.syncing;
-      final newId = await client.create('xbb', 'repo', newItem.body.toJson());
-      final fetchedItem = await client.get<Repo>('xbb', 'repo', newId, Repo.fromJson);
-      // change from synced to archived as it's a new one.
-      fetchedItem.syncStatus = SyncStatus.archived;
-      await RepoRepository().addToLocalDb(fetchedItem);
-      final index = _repos.indexWhere((item) => item.id == newItem.id);
-      if (index != -1) {
-        _repos[index] = fetchedItem;
-      }
-      if (currentRepoId.value == newItem.id) {
-        currentRepoId.value = fetchedItem.id;
-      }
-    } catch (e) {
-      print('_bgSyncNew Failed to sync new repo to server: $e');
-      newItem.syncStatus = SyncStatus.failed;
-      await RepoRepository().updateToLocalDb(newItem);
-    }
-  }
+//   void onSelectRepo(String id) {
+//     currentRepoId.value = id;
+//   }
 
-  Future<void> _bgSyncUpdate(RepoDataItem updatedItem) async {
-    assert(updatedItem.syncStatus == SyncStatus.pending);
-    try {
-      updatedItem.syncStatus = SyncStatus.syncing;
-      await RepoRepository().updateToLocalDb(updatedItem);
-      await client.update('xbb', 'repo', updatedItem.id, updatedItem.body.toJson());
-      // fetch the latest from server to avoid any conflict, mainly update the timestamps
-      final fetchedItem = await client.get<Repo>('xbb', 'repo', updatedItem.id, Repo.fromJson);
-      fetchedItem.syncStatus = SyncStatus.archived;
-      await RepoRepository().updateToLocalDb(fetchedItem);
-      final index = _repos.indexWhere((item) => item.id == updatedItem.id);
-      if (index != -1) {
-        _repos[index] = fetchedItem;
-      }
-    } catch (e) {
-      print('_bgSyncUpdate Failed to sync updated repo to server: $e');
-      updatedItem.syncStatus = SyncStatus.failed;
-      await RepoRepository().updateToLocalDb(updatedItem);
-    }
-  }
+//   List<RepoDataItem> onViewRepos(String? parent_id) {
+//     if (parent_id == null) {
+//       return _items;
+//     }
+//     return _items.where((item) => item.parentId == parent_id).toList();
+//   }
 
-  Future<void> _bgSyncDelete(String id) async {
-    try {
-      await RepoRepository().deleteFromLocalDb(id);
-      await client.delete('xbb', 'repo', id);
-    } catch (e) {
-      print('_bgSyncDelete Failed to delete repo on server: $e');
-    }
-  }
-}
+//   Future<void> trySyncAll() async => await _syncEngine.syncAll();
+//   void _replaceLocal(String id, RepoDataItem fetchedItem) {
+//     final index = _items.indexWhere((item) => item.id == id);
+//     if (index != -1) {
+//       _items[index] = fetchedItem;
+//     }
+//     // print('Replaced local repo with id: $id, new id: ${fetchedItem.id}');
+//     if (currentRepoId.value == id && fetchedItem.id != id) {
+//       // update current selected id if changed by server generated id
+//       currentRepoId.value = fetchedItem.id;
+//     }
+//   }
+
+//   void addData(Repo newData) {
+//     // generate a local uuid before successfully created on server
+//     final owner = client.currentUserId();
+//     final newItem = RepoDataItem.localNew(owner, newData);
+//     // it's a temporary memory data, not even in local db yet.
+//     _items.add(newItem);
+//     _syncEngine.create(newItem).then((fetchedItem) {
+//       _replaceLocal(newItem.id, fetchedItem);
+//     });
+//   }
+
+//   void updateData(String id, Repo updatedData) {
+//     final item = _items.firstWhere((item) => item.id == id);
+//     // todo maybe rewrite this update body method...
+//     final updatedItem = item.updatedBody(updatedData);
+//     _items[_items.indexOf(item)] = updatedItem;
+//     _syncEngine.update(updatedItem).then((fetchedItem) {
+//       _replaceLocal(updatedItem.id, fetchedItem);
+//     });
+//   }
+
+//   void deleteData(String id) {
+//     _items.removeWhere((item) => item.id == id);
+//     _syncEngine.delete(id);
+//   }
+// }
 
 class TestDataBase {
   static Database? _db;

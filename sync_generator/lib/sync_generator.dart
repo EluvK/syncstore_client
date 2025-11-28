@@ -3,94 +3,18 @@ import 'package:source_gen/source_gen.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:sync_annotation/sync_annotation.dart';
 
-class SyncModelGenerator extends GeneratorForAnnotation<SyncModel> {
-  @override
-  String generateForAnnotatedElement(Element element, ConstantReader annotation, BuildStep buildStep) {
-    if (element is! ClassElement) return '';
-
-    final clazz = element;
-    final className = clazz.name;
-    final fields = clazz.fields.where((f) => !f.isStatic);
-
-    final localFields = fields.where(
-      (f) => !f.metadata.annotations.any((m) => m.element?.enclosingElement?.name == 'SkipField'),
-    );
-    final remoteFields = localFields.where(
-      (f) => !f.metadata.annotations.any((m) => m.element?.enclosingElement?.name == 'LocalField'),
-    );
-
-    final buffer = StringBuffer();
-    buffer.writeln('// Generated code for $className');
-    buffer.writeln('// local fields: ${localFields.map((f) => f.name).toList()}');
-    buffer.writeln('// remote fields: ${remoteFields.map((f) => f.name).toList()}');
-
-    // fromRemoteJson, toLocalJson, fromLocalJson, toRemoteJson,
-    buffer.write('$className _\$${className}FromRemoteJson(Map<String, dynamic> json) => $className(');
-    for (var f in remoteFields) {
-      buffer.writeln("    ${f.name}: json['${f.name}'],");
-    }
-    buffer.writeln('  );');
-    buffer.writeln("Map<String, dynamic> _\$${className}ToRemoteJson($className instance) => <String, dynamic>{");
-    for (var f in remoteFields) {
-      buffer.writeln("  '${f.name}': instance.${f.name},");
-    }
-    buffer.writeln('};');
-    buffer.write('$className _\$${className}FromLocalJson(Map<String, dynamic> json) => $className(');
-    for (var f in localFields) {
-      buffer.writeln("    ${f.name}: json['${f.name}'],");
-    }
-    buffer.writeln('  );');
-    buffer.writeln("Map<String, dynamic> _\$${className}ToLocalJson($className instance) => <String, dynamic>{");
-    for (var f in localFields) {
-      buffer.writeln("  '${f.name}': instance.${f.name},");
-    }
-    buffer.writeln('};');
-
-    // buffer.writeln('extension ${className}SyncExt on $className {');
-
-    // // toLocalJson
-    // buffer.writeln('  Map<String, dynamic> toLocalJson() => {');
-    // for (var f in localFields) {
-    //   buffer.writeln("    '${f.name}': ${f.name},");
-    // }
-    // buffer.writeln('  };');
-    // // fromLocalJson
-    // buffer.writeln('  static $className fromLocalJson(Map<String, dynamic> json) => $className(');
-    // for (var f in localFields) {
-    //   buffer.writeln("    ${f.name}: json['${f.name}'],");
-    // }
-    // buffer.writeln('  );');
-
-    // // toRemoteJson
-    // buffer.writeln('  Map<String, dynamic> toRemoteJson() => {');
-    // for (var f in remoteFields) {
-    //   buffer.writeln("    '${f.name}': ${f.name},");
-    // }
-    // buffer.writeln('  };');
-    // // fromRemoteJson
-    // buffer.writeln('  static $className fromRemoteJson(Map<String, dynamic> json) => $className(');
-    // for (var f in remoteFields) {
-    //   buffer.writeln("    ${f.name}: json['${f.name}'],");
-    // }
-    // for (var f in localFields) {
-    //   buffer.writeln("    ${f.name}: null,"); // 本地字段可用默认值
-    // }
-    // buffer.writeln('  );');
-
-    // buffer.writeln('}');
-
-    return buffer.toString();
-  }
-}
-
 class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
   @override
   generateForAnnotatedElement(Element element, ConstantReader annotation, BuildStep buildStep) {
     if (element is! ClassElement) return '';
 
     final className = element.name; // Repo
+    final collectionName = annotation.read('collectionName').stringValue;
     final tableName = annotation.read('tableName').stringValue;
     final dbType = annotation.read('db').typeValue.getDisplayString();
+    final DataItemType = '${className}DataItem';
+    final RepositoryType = '${className}Repository';
+    final ControllerType = '${className}Controller';
 
     final extName = 'LocalStore$className';
 
@@ -117,17 +41,17 @@ extension $extName on $className {
   }
 }
 
-typedef ${className}DataItem = DataItem<$className>;
+typedef ${DataItemType} = DataItem<$className>;
 
-class ${className}Repository {
-  Future<void> addToLocalDb(${className}DataItem item) async {
+class ${RepositoryType} {
+  Future<void> addToLocalDb(${DataItemType} item) async {
     final db = await $extName.getDb();
     await db.insert(
       $extName.tableName, item.toJson((r) => json.encode(r.toJson())),
     );
   }
 
-  Future<${className}DataItem?> getFromLocalDb(String id) async {
+  Future<${DataItemType}?> getFromLocalDb(String id) async {
     final db = await $extName.getDb();
     final List<Map<String, dynamic>> maps = await db.query($extName.tableName, where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) {
@@ -136,7 +60,7 @@ class ${className}Repository {
     return null;
   }
 
-  Future<List<${className}DataItem>> listFromLocalDb({String? parentId}) async {
+  Future<List<${DataItemType}>> listFromLocalDb({String? parentId}) async {
     final db = await $extName.getDb();
     final whereClauses = <String>[];
     final whereArgs = <dynamic>[];
@@ -162,7 +86,7 @@ class ${className}Repository {
     await db.delete($extName.tableName, where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<void> updateToLocalDb(${className}DataItem item) async {
+  Future<void> updateToLocalDb(${DataItemType} item) async {
     final db = await $extName.getDb();
     await db.update(
       $extName.tableName,
@@ -172,7 +96,7 @@ class ${className}Repository {
     );
   }
 
-  Future<void> upsertToLocalDb(${className}DataItem item) async {
+  Future<void> upsertToLocalDb(${DataItemType} item) async {
     if (await getFromLocalDb(item.id) == null) {
       await addToLocalDb(item);
     } else {
@@ -180,9 +104,152 @@ class ${className}Repository {
     }
   }
 }
+
+class ${ControllerType} extends GetxController {
+  final SyncStoreClient client;
+  final _${className}SyncEngine _syncEngine;
+  ${ControllerType}(this.client) : _syncEngine = _${className}SyncEngine(client);
+
+  final RxList<${DataItemType}> _items = <${DataItemType}>[].obs;
+  final Rx<String?> current${className}Id = Rx<String?>(null);
+
+  @override
+  Future<void> onInit() async {
+    await rebuildLocal();
+    super.onInit();
+    _initialized = true;
+  }
+
+  bool _initialized = false;
+  Future<void> ensureInitialization() async {
+    while (!_initialized) {
+      await onInit();
+    }
+    return;
+  }
+  Future<void> rebuildLocal() async {
+    _items.value = await ${RepositoryType}().listFromLocalDb();
+  }
+  void onSelect${className}(String id) {
+    current${className}Id.value = id;
+  }
+  List<${DataItemType}> onView${className}s(String? parent_id) {
+    if (parent_id == null) {
+      return _items;
+    }
+    return _items.where((item) => item.parentId == parent_id).toList();
+  }
+  Future<void> trySyncAll() async => await _syncEngine.syncAll();
+  void _replaceLocal(String id, ${DataItemType} fetchedItem) {
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _items[index] = fetchedItem;
+    }
+    // print('Replaced local $className with id: \$id, new id: \${fetchedItem.id}');
+    if (current${className}Id.value == id && fetchedItem.id != id) {
+      // update current selected id if changed by server generated id
+      current${className}Id.value = fetchedItem.id;
+    }
+  }
+  void addData($className newData) {
+    // generate a local uuid before successfully created on server
+    final owner = client.currentUserId();
+    final newItem = ${DataItemType}.localNew(owner, newData);
+    // it's a temporary memory data, not even in local db yet.
+    _items.add(newItem); 
+    _syncEngine.create(newItem).then((fetchedItem) {
+      _replaceLocal(newItem.id, fetchedItem);
+    });
+  }
+  void updateData(String id, $className updatedData) {
+    final item = _items.firstWhere((item) => item.id == id);
+    // todo maybe rewrite this update body method...
+    final updatedItem = item.updatedBody(updatedData);
+    _items[_items.indexOf(item)] = updatedItem;
+    _syncEngine.update(updatedItem).then((fetchedItem) {
+      _replaceLocal(updatedItem.id, fetchedItem);
+    });
+  }
+  void deleteData(String id) {
+    _items.removeWhere((item) => item.id == id);
+    _syncEngine.delete(id);
+  }
+}
+
+class _${className}SyncEngine {
+  final SyncStoreClient client;
+  _${className}SyncEngine(this.client);
+
+  Future<${DataItemType}> create(${DataItemType} local) async {
+    local.syncStatus = SyncStatus.syncing;
+    await ${RepositoryType}().addToLocalDb(local);
+
+    final newId = await client.create('$collectionName', '$tableName', local.body.toJson());
+    final ${DataItemType} createdItem = await client.get<$className>('$collectionName', '$tableName', newId, $className.fromJson);
+    createdItem.syncStatus = SyncStatus.archived;
+
+    await ${RepositoryType}().deleteFromLocalDb(local.id);
+    await ${RepositoryType}().addToLocalDb(createdItem);
+    return createdItem;
+  }
+  Future<${DataItemType}> update(${DataItemType} local) async {
+    local.syncStatus = SyncStatus.syncing;
+    await ${RepositoryType}().updateToLocalDb(local);
+    await client.update('$collectionName', '$tableName', local.id, local.body.toJson());
+    final ${DataItemType} updatedItem = await client.get<$className>('$collectionName', '$tableName', local.id, $className.fromJson);
+    updatedItem.syncStatus = SyncStatus.archived;
+    await ${RepositoryType}().updateToLocalDb(updatedItem);
+    return updatedItem;
+  }
+  void delete(String id) {
+    ${RepositoryType}().deleteFromLocalDb(id);
+    try {
+      client.delete('$collectionName', '$tableName', id);
+    } catch (e) {
+      rethrow;
+    }
+  }
+  Future<void> syncAll() async {
+    try {
+      var nextMarker = null;
+      final serviceIds = <String>{};
+      do {
+        final ListResponse resp = await client.list('$collectionName', '$tableName', limit: 50, marker: nextMarker);
+        nextMarker = resp.pageInfo.nextMarker;
+        for (var summary in resp.items) {
+          serviceIds.add(summary.id);
+          final ${DataItemType}? localItem = await ${RepositoryType}().getFromLocalDb(summary.id);
+          if (localItem == null) {
+            // new from server
+            final ${DataItemType} item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
+            await ${RepositoryType}().addToLocalDb(item);
+          } else if (localItem.updatedAt.isBefore(summary.updatedAt)) {
+            // update local data.
+            final ${DataItemType} item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
+            await ${RepositoryType}().updateToLocalDb(item);
+          } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
+            // local data is newer, need to sync to server
+            localItem.syncStatus = SyncStatus.failed;
+            await ${RepositoryType}().updateToLocalDb(localItem);
+          }
+        }
+      } while (nextMarker != null);
+      // clean up local data that are deleted from server
+      final localItems = await ${RepositoryType}().listFromLocalDb();
+      for (${DataItemType} localItem in localItems) {
+        if (!serviceIds.contains(localItem.id)) {
+          localItem.syncStatus = SyncStatus.deleted;
+          await ${RepositoryType}().updateToLocalDb(localItem);
+        }
+      }
+    } catch (e) {
+      // todo more error handling?
+      rethrow;
+    }
+  }
+}
 ''';
   }
 }
 
-Builder syncModelBuilder(BuilderOptions options) =>
-    SharedPartBuilder([SyncModelGenerator(), RepositoryGenerator()], 'syncstore');
+Builder syncModelBuilder(BuilderOptions options) => SharedPartBuilder([RepositoryGenerator()], 'syncstore');
