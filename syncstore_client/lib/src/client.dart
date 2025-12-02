@@ -8,7 +8,6 @@ class SyncStoreClient {
   final Dio _dio;
   final TokenStorage tokenStorage;
   final AuthService authService;
-  String? _userId;
 
   SyncStoreClient._(this._dio, this.tokenStorage, this.authService);
 
@@ -22,23 +21,23 @@ class SyncStoreClient {
   Future<UserProfile> login(String username, String password) {
     return perform(() async {
       final userId = await authService.login(username, password);
-      _userId = userId;
+      tokenStorage.setUserId(userId);
       return getProfile(userId);
     });
   }
 
   Future<bool> logout() async {
     // Just clear tokens, todo might need to call server logout endpoint in future
-    _userId = null;
     await tokenStorage.clear();
     return true;
   }
 
   String currentUserId() {
-    if (_userId == null) {
+    final String? userId = tokenStorage.getUserId();
+    if (userId == null) {
       throw ApiException(ApiError.loginRequired);
     }
-    return _userId!;
+    return userId;
   }
 
   Future<bool> checkHealth() {

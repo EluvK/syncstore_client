@@ -2,6 +2,7 @@ import 'dart:async';
 import 'token_storage.dart';
 
 class InMemoryTokenStorage implements TokenStorage {
+  String? _userId;
   String? _access;
   String? _refresh;
   DateTime? _accessExpiry;
@@ -26,6 +27,16 @@ class InMemoryTokenStorage implements TokenStorage {
   }
 
   @override
+  String? getUserId() {
+    return _userId;
+  }
+
+  @override
+  void setUserId(String userId) {
+    _userId = userId;
+  }
+
+  @override
   Future<void> setAccessToken(String token, {DateTime? expiry}) async {
     _access = token;
     _accessExpiry = expiry;
@@ -39,6 +50,7 @@ class InMemoryTokenStorage implements TokenStorage {
 
   @override
   Future<void> clear() async {
+    _userId = null;
     _access = null;
     _refresh = null;
     _accessExpiry = null;

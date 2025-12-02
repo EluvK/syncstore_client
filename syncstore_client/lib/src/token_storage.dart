@@ -10,5 +10,7 @@ abstract class TokenStorage {
   Future<String?> getAccessToken();
   Future<void> setRefreshToken(String token, {DateTime? expiry});
   Future<String?> getRefreshToken();
+  void setUserId(String userId);
+  String? getUserId();
   Future<void> clear();
 }

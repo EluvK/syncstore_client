@@ -15,6 +15,7 @@ class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
     final DataItemType = '${className}DataItem';
     final RepositoryType = '${className}Repository';
     final ControllerType = '${className}Controller';
+    final activeItemId = 'current${className}Id';
 
     final extName = 'LocalStore$className';
 
@@ -111,7 +112,7 @@ class ${ControllerType} extends GetxController {
   ${ControllerType}(this.client) : _syncEngine = _${className}SyncEngine(client);
 
   final RxList<${DataItemType}> _items = <${DataItemType}>[].obs;
-  final Rx<String?> current${className}Id = Rx<String?>(null);
+  final Rx<String?> $activeItemId = Rx<String?>(null);
 
   @override
   Future<void> onInit() async {
@@ -131,7 +132,7 @@ class ${ControllerType} extends GetxController {
     _items.value = await ${RepositoryType}().listFromLocalDb();
   }
   void onSelect${className}(String id) {
-    current${className}Id.value = id;
+    $activeItemId.value = id;
   }
   List<${DataItemType}> onView${className}s(String? parent_id) {
     if (parent_id == null) {
@@ -146,9 +147,9 @@ class ${ControllerType} extends GetxController {
       _items[index] = fetchedItem;
     }
     // print('Replaced local $className with id: \$id, new id: \${fetchedItem.id}');
-    if (current${className}Id.value == id && fetchedItem.id != id) {
+    if ($activeItemId.value == id && fetchedItem.id != id) {
       // update current selected id if changed by server generated id
-      current${className}Id.value = fetchedItem.id;
+      $activeItemId.value = fetchedItem.id;
     }
   }
   void addData($className newData) {
@@ -172,7 +173,11 @@ class ${ControllerType} extends GetxController {
   }
   void deleteData(String id) {
     _items.removeWhere((item) => item.id == id);
-    _syncEngine.delete(id);
+    if ($activeItemId.value == id) {
+      $activeItemId.value = null;
+    }
+    final status = _items.firstWhereOrNull((item) => item.id == id)?.syncStatus;
+    _syncEngine.delete(id, status != SyncStatus.deleted);
   }
 }
 
@@ -184,8 +189,15 @@ class _${className}SyncEngine {
     local.syncStatus = SyncStatus.syncing;
     await ${RepositoryType}().addToLocalDb(local);
 
-    final newId = await client.create('$collectionName', '$tableName', local.body.toJson());
-    final ${DataItemType} createdItem = await client.get<$className>('$collectionName', '$tableName', newId, $className.fromJson);
+    ${DataItemType} createdItem;
+    try {
+      final newId = await client.create('$collectionName', '$tableName', local.body.toJson());
+      createdItem = await client.get<$className>('$collectionName', '$tableName', newId, $className.fromJson);
+    } catch (e) {
+      local.syncStatus = SyncStatus.failed;
+      await ${RepositoryType}().updateToLocalDb(local);
+      rethrow;
+    }
     createdItem.syncStatus = SyncStatus.archived;
 
     await ${RepositoryType}().deleteFromLocalDb(local.id);
@@ -195,14 +207,26 @@ class _${className}SyncEngine {
   Future<${DataItemType}> update(${DataItemType} local) async {
     local.syncStatus = SyncStatus.syncing;
     await ${RepositoryType}().updateToLocalDb(local);
-    await client.update('$collectionName', '$tableName', local.id, local.body.toJson());
-    final ${DataItemType} updatedItem = await client.get<$className>('$collectionName', '$tableName', local.id, $className.fromJson);
+
+    ${DataItemType} updatedItem;
+    try {
+      await client.update('$collectionName', '$tableName', local.id, local.body.toJson());
+      updatedItem = await client.get<$className>('$collectionName', '$tableName', local.id, $className.fromJson);
+    } catch (e) {
+      local.syncStatus = SyncStatus.failed;
+      await ${RepositoryType}().updateToLocalDb(local);
+      rethrow;
+    }
     updatedItem.syncStatus = SyncStatus.archived;
+    
     await ${RepositoryType}().updateToLocalDb(updatedItem);
     return updatedItem;
   }
-  void delete(String id) {
+  void delete(String id, bool deleteFromServer) {
     ${RepositoryType}().deleteFromLocalDb(id);
+    if (!deleteFromServer) {
+      return;
+    }
     try {
       client.delete('$collectionName', '$tableName', id);
     } catch (e) {

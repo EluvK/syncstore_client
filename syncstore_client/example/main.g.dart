@@ -177,7 +177,11 @@ class RepoController extends GetxController {
 
   void deleteData(String id) {
     _items.removeWhere((item) => item.id == id);
-    _syncEngine.delete(id);
+    if (currentRepoId.value == id) {
+      currentRepoId.value = null;
+    }
+    final status = _items.firstWhereOrNull((item) => item.id == id)?.syncStatus;
+    _syncEngine.delete(id, status != SyncStatus.deleted);
   }
 }
 
@@ -189,8 +193,15 @@ class _RepoSyncEngine {
     local.syncStatus = SyncStatus.syncing;
     await RepoRepository().addToLocalDb(local);
 
-    final newId = await client.create('xbb', 'repo', local.body.toJson());
-    final RepoDataItem createdItem = await client.get<Repo>('xbb', 'repo', newId, Repo.fromJson);
+    RepoDataItem createdItem;
+    try {
+      final newId = await client.create('xbb', 'repo', local.body.toJson());
+      createdItem = await client.get<Repo>('xbb', 'repo', newId, Repo.fromJson);
+    } catch (e) {
+      local.syncStatus = SyncStatus.failed;
+      await RepoRepository().updateToLocalDb(local);
+      rethrow;
+    }
     createdItem.syncStatus = SyncStatus.archived;
 
     await RepoRepository().deleteFromLocalDb(local.id);
@@ -201,15 +212,27 @@ class _RepoSyncEngine {
   Future<RepoDataItem> update(RepoDataItem local) async {
     local.syncStatus = SyncStatus.syncing;
     await RepoRepository().updateToLocalDb(local);
-    await client.update('xbb', 'repo', local.id, local.body.toJson());
-    final RepoDataItem updatedItem = await client.get<Repo>('xbb', 'repo', local.id, Repo.fromJson);
+
+    RepoDataItem updatedItem;
+    try {
+      await client.update('xbb', 'repo', local.id, local.body.toJson());
+      updatedItem = await client.get<Repo>('xbb', 'repo', local.id, Repo.fromJson);
+    } catch (e) {
+      local.syncStatus = SyncStatus.failed;
+      await RepoRepository().updateToLocalDb(local);
+      rethrow;
+    }
     updatedItem.syncStatus = SyncStatus.archived;
+
     await RepoRepository().updateToLocalDb(updatedItem);
     return updatedItem;
   }
 
-  void delete(String id) {
+  void delete(String id, bool deleteFromServer) {
     RepoRepository().deleteFromLocalDb(id);
+    if (!deleteFromServer) {
+      return;
+    }
     try {
       client.delete('xbb', 'repo', id);
     } catch (e) {
