@@ -33,6 +33,7 @@ extension $extName on $className {
           parent_id TEXT,
           "unique" TEXT,
           sync_status TEXT NOT NULL,
+          color_tag TEXT NOT NULL,
           body TEXT NOT NULL
         )
       """;
@@ -134,11 +135,11 @@ class ${ControllerType} extends GetxController {
   void onSelect${className}(String id) {
     $activeItemId.value = id;
   }
-  List<${DataItemType}> onView${className}s(String? parent_id) {
-    if (parent_id == null) {
+  List<${DataItemType}> onView${className}s(String? parentId) {
+    if (parentId == null) {
       return _items;
     }
-    return _items.where((item) => item.parentId == parent_id).toList();
+    return _items.where((item) => item.parentId == parentId).toList();
   }
   Future<void> trySyncAll() async => await _syncEngine.syncAll();
   void _replaceLocal(String id, ${DataItemType} fetchedItem) {
@@ -171,6 +172,11 @@ class ${ControllerType} extends GetxController {
       _replaceLocal(updatedItem.id, fetchedItem);
     });
   }
+  void updateColorLocal(String id, ColorTag color) {
+    final item = _items.firstWhere((item) => item.id == id);
+    final updatedItem = item.updatedColorTag(color);
+    _items[_items.indexOf(item)] = updatedItem;
+  }
   void deleteData(String id) {
     _items.removeWhere((item) => item.id == id);
     if ($activeItemId.value == id) {
@@ -199,6 +205,7 @@ class _${className}SyncEngine {
       rethrow;
     }
     createdItem.syncStatus = SyncStatus.archived;
+    createdItem.colorTag = local.colorTag;
 
     await ${RepositoryType}().deleteFromLocalDb(local.id);
     await ${RepositoryType}().addToLocalDb(createdItem);
@@ -218,6 +225,7 @@ class _${className}SyncEngine {
       rethrow;
     }
     updatedItem.syncStatus = SyncStatus.archived;
+    updatedItem.colorTag = local.colorTag;
     
     await ${RepositoryType}().updateToLocalDb(updatedItem);
     return updatedItem;

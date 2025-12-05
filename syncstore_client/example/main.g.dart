@@ -32,6 +32,7 @@ extension LocalStoreRepo on Repo {
           parent_id TEXT,
           "unique" TEXT,
           sync_status TEXT NOT NULL,
+          color_tag TEXT NOT NULL,
           body TEXT NOT NULL
         )
       """;
@@ -134,11 +135,11 @@ class RepoController extends GetxController {
     currentRepoId.value = id;
   }
 
-  List<RepoDataItem> onViewRepos(String? parent_id) {
-    if (parent_id == null) {
+  List<RepoDataItem> onViewRepos(String? parentId) {
+    if (parentId == null) {
       return _items;
     }
-    return _items.where((item) => item.parentId == parent_id).toList();
+    return _items.where((item) => item.parentId == parentId).toList();
   }
 
   Future<void> trySyncAll() async => await _syncEngine.syncAll();
@@ -175,6 +176,12 @@ class RepoController extends GetxController {
     });
   }
 
+  void updateColorLocal(String id, ColorTag color) {
+    final item = _items.firstWhere((item) => item.id == id);
+    final updatedItem = item.updatedColorTag(color);
+    _items[_items.indexOf(item)] = updatedItem;
+  }
+
   void deleteData(String id) {
     _items.removeWhere((item) => item.id == id);
     if (currentRepoId.value == id) {
@@ -203,6 +210,7 @@ class _RepoSyncEngine {
       rethrow;
     }
     createdItem.syncStatus = SyncStatus.archived;
+    createdItem.colorTag = local.colorTag;
 
     await RepoRepository().deleteFromLocalDb(local.id);
     await RepoRepository().addToLocalDb(createdItem);
@@ -223,6 +231,7 @@ class _RepoSyncEngine {
       rethrow;
     }
     updatedItem.syncStatus = SyncStatus.archived;
+    updatedItem.colorTag = local.colorTag;
 
     await RepoRepository().updateToLocalDb(updatedItem);
     return updatedItem;

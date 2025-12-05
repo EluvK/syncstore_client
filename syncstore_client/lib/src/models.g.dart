@@ -39,6 +39,7 @@ DataItem<T> _$DataItemFromJson<T>(Map<String, dynamic> json, T Function(Object? 
   json['unique'] as String?,
   body: fromJsonT(json['body']),
   syncStatus: $enumDecodeNullable(_$SyncStatusEnumMap, json['sync_status']) ?? SyncStatus.synced,
+  colorTag: $enumDecodeNullable(_$ColorTagEnumMap, json['color_tag']) ?? ColorTag.none,
 );
 
 Map<String, dynamic> _$DataItemToJson<T>(DataItem<T> instance, Object? Function(T value) toJsonT) => <String, dynamic>{
@@ -49,6 +50,7 @@ Map<String, dynamic> _$DataItemToJson<T>(DataItem<T> instance, Object? Function(
   'parent_id': instance.parentId,
   'unique': instance.unique,
   'sync_status': _$SyncStatusEnumMap[instance.syncStatus]!,
+  'color_tag': _$ColorTagEnumMap[instance.colorTag]!,
   'body': toJsonT(instance.body),
 };
 
@@ -59,6 +61,16 @@ const _$SyncStatusEnumMap = {
   SyncStatus.syncing: 'syncing',
   SyncStatus.synced: 'synced',
   SyncStatus.archived: 'archived',
+};
+
+const _$ColorTagEnumMap = {
+  ColorTag.none: 'none',
+  ColorTag.red: 'red',
+  ColorTag.orange: 'orange',
+  ColorTag.yellow: 'yellow',
+  ColorTag.green: 'green',
+  ColorTag.blue: 'blue',
+  ColorTag.gray: 'gray',
 };
 
 DataItemSummary _$DataItemSummaryFromJson(Map<String, dynamic> json) => DataItemSummary(

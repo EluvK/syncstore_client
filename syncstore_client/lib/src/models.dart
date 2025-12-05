@@ -31,6 +31,8 @@ class UpdateUserProfileRequest {
 
 enum SyncStatus { failed, deleted, pending, syncing, synced, archived }
 
+enum ColorTag { none, red, orange, yellow, green, blue, gray }
+
 @JsonSerializable(fieldRename: FieldRename.snake, genericArgumentFactories: true)
 class DataItem<T> {
   final String id;
@@ -40,9 +42,10 @@ class DataItem<T> {
   final String? parentId;
   final String? unique;
 
-  // this field is client-side only, but since nothings happened even we do send it to server
+  // below fields are client-side only, but since nothings happened even we do send it to server
   // it's ok to keep it here to make this usage easier, less type gymnastics.
   SyncStatus syncStatus;
+  ColorTag colorTag;
 
   final T body;
 
@@ -56,6 +59,7 @@ class DataItem<T> {
     required this.body,
     // the default is synced, as we usually fetch data from server, which is definitely ''synced''
     this.syncStatus = SyncStatus.synced,
+    this.colorTag = ColorTag.none,
   });
 
   factory DataItem.localNew(String owner, T body, {String? parentId, String? unique}) {
@@ -74,8 +78,23 @@ class DataItem<T> {
       parentId,
       unique,
       body: newBody,
-      // todo
+      // when updated, set to pending, since we need to sync it to server again.
       syncStatus: SyncStatus.pending,
+      colorTag: colorTag,
+    );
+  }
+
+  DataItem<T> updatedColorTag(ColorTag newColorTag) {
+    return DataItem<T>(
+      id,
+      createdAt,
+      updatedAt,
+      owner,
+      parentId,
+      unique,
+      body: body,
+      syncStatus: syncStatus,
+      colorTag: newColorTag,
     );
   }
 
