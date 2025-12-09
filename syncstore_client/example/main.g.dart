@@ -135,14 +135,18 @@ class RepoController extends GetxController {
     currentRepoId.value = id;
   }
 
-  List<RepoDataItem> onViewRepos(String? parentId) {
-    if (parentId == null) {
+  List<RepoDataItem> onViewRepos({List<DataItemFilter<Repo>> filters = const []}) {
+    if (filters.isEmpty) {
       return _items;
     }
-    return _items.where((item) => item.parentId == parentId).toList();
+    return _items.where((item) => filters.every((filter) => filter.apply(item))).toList();
   }
 
-  Future<void> trySyncAll() async => await _syncEngine.syncAll();
+  Future<void> trySyncAll() async {
+    await _syncEngine.syncAll();
+    await rebuildLocal();
+  }
+
   void _replaceLocal(String id, RepoDataItem fetchedItem) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {

@@ -135,13 +135,16 @@ class ${ControllerType} extends GetxController {
   void onSelect${className}(String id) {
     $activeItemId.value = id;
   }
-  List<${DataItemType}> onView${className}s(String? parentId) {
-    if (parentId == null) {
+  List<${DataItemType}> onView${className}s({List<DataItemFilter<$className>> filters = const []}) {
+    if (filters.isEmpty) {
       return _items;
     }
-    return _items.where((item) => item.parentId == parentId).toList();
+    return _items.where((item) => filters.every((filter) => filter.apply(item))).toList();
   }
-  Future<void> trySyncAll() async => await _syncEngine.syncAll();
+  Future<void> trySyncAll() async {
+    await _syncEngine.syncAll();
+    await rebuildLocal();
+  }
   void _replaceLocal(String id, ${DataItemType} fetchedItem) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
