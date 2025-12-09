@@ -135,7 +135,7 @@ class ${ControllerType} extends GetxController {
   void onSelect${className}(String id) {
     $activeItemId.value = id;
   }
-  List<${DataItemType}> onView${className}s({List<DataItemFilter<$className>> filters = const []}) {
+  List<${DataItemType}> onView${className}s({List<DataItemFilter> filters = const []}) {
     if (filters.isEmpty) {
       return _items;
     }
