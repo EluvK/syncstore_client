@@ -135,7 +135,7 @@ class RepoController extends GetxController {
     currentRepoId.value = id;
   }
 
-  List<RepoDataItem> onViewRepos({List<DataItemFilter<Repo>> filters = const []}) {
+  List<RepoDataItem> onViewRepos({List<DataItemFilter> filters = const []}) {
     if (filters.isEmpty) {
       return _items;
     }
@@ -180,10 +180,9 @@ class RepoController extends GetxController {
     });
   }
 
-  void updateColorLocal(String id, ColorTag color) {
+  void onUpdateLocalField(String id) {
     final item = _items.firstWhere((item) => item.id == id);
-    final updatedItem = item.updatedColorTag(color);
-    _items[_items.indexOf(item)] = updatedItem;
+    RepoRepository().updateToLocalDb(item);
   }
 
   void deleteData(String id) {

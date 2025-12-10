@@ -84,20 +84,6 @@ class DataItem<T> {
     );
   }
 
-  DataItem<T> updatedColorTag(ColorTag newColorTag) {
-    return DataItem<T>(
-      id,
-      createdAt,
-      updatedAt,
-      owner,
-      parentId,
-      unique,
-      body: body,
-      syncStatus: syncStatus,
-      colorTag: newColorTag,
-    );
-  }
-
   factory DataItem.fromJson(Map<String, dynamic> json, T Function(Object?) fromJsonT) =>
       _$DataItemFromJson(json, fromJsonT);
   Map<String, dynamic> toJson(Object? Function(T value) toJsonT) => _$DataItemToJson(this, toJsonT);

@@ -4,7 +4,7 @@ abstract interface class DataItemFilter<T> {
   bool apply(DataItem<T> item);
 }
 
-abstract interface class DataItemBodyFilter<T> implements DataItemFilter<T> {
+abstract class DataItemBodyFilter<T> implements DataItemFilter<T> {
   bool applyBody(T body);
   @override
   bool apply(DataItem<T> item) => applyBody(item.body);

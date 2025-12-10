@@ -175,10 +175,9 @@ class ${ControllerType} extends GetxController {
       _replaceLocal(updatedItem.id, fetchedItem);
     });
   }
-  void updateColorLocal(String id, ColorTag color) {
+  void onUpdateLocalField(String id) {
     final item = _items.firstWhere((item) => item.id == id);
-    final updatedItem = item.updatedColorTag(color);
-    _items[_items.indexOf(item)] = updatedItem;
+    ${RepositoryType}().updateToLocalDb(item);
   }
   void deleteData(String id) {
     _items.removeWhere((item) => item.id == id);
