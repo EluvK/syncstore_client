@@ -64,6 +64,25 @@ enum ColorTagFilter implements DataItemFilter {
         return true;
     }
   }
+
+  factory ColorTagFilter.fromColorTag(ColorTag tag) {
+    switch (tag) {
+      case ColorTag.red:
+        return ColorTagFilter.red;
+      case ColorTag.orange:
+        return ColorTagFilter.orange;
+      case ColorTag.yellow:
+        return ColorTagFilter.yellow;
+      case ColorTag.green:
+        return ColorTagFilter.green;
+      case ColorTag.blue:
+        return ColorTagFilter.blue;
+      case ColorTag.gray:
+        return ColorTagFilter.gray;
+      case ColorTag.none:
+        return ColorTagFilter.all;
+    }
+  }
 }
 
 class OrFilter<T> implements DataItemFilter<T> {

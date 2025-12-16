@@ -49,7 +49,7 @@ class SyncStoreClient {
 
   Future<UserProfile> getProfile(String userId) {
     return perform(() async {
-      final resp = await _dio.get('/user/$userId');
+      final resp = await _dio.get('/user/profile/$userId');
       final data = resp.data as Map<String, dynamic>;
       return UserProfile.fromJson(data);
     });
@@ -57,9 +57,17 @@ class SyncStoreClient {
 
   Future<UserProfile> updateProfile(String userId, UserProfile profile) {
     return perform(() async {
-      final resp = await _dio.post('/user/${userId}', data: profile.toJson());
+      final resp = await _dio.post('/user/profile/$userId', data: profile.toJson());
       final data = resp.data as Map<String, dynamic>;
       return UserProfile.fromJson(data);
+    });
+  }
+
+  Future<List<UserProfile>> getFriends() {
+    return perform(() async {
+      final resp = await _dio.get('/user/friends');
+      final data = resp.data as List<dynamic>;
+      return data.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
     });
   }
 
