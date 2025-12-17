@@ -66,8 +66,9 @@ class SyncStoreClient {
   Future<List<UserProfile>> getFriends() {
     return perform(() async {
       final resp = await _dio.get('/user/friends');
-      final data = resp.data as List<dynamic>;
-      return data.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
+      final data = resp.data as Map<String, dynamic>;
+      final friends = data['friends'] as List<dynamic>;
+      return friends.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
     });
   }
 
