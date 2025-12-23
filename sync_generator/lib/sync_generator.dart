@@ -245,7 +245,7 @@ class _${className}SyncEngine {
   }
   Future<void> syncAll() async {
     try {
-      var nextMarker = null;
+      String? nextMarker;
       final serviceIds = <String>{};
       do {
         final ListResponse resp = await client.list('$collectionName', '$tableName', limit: 50, marker: nextMarker);

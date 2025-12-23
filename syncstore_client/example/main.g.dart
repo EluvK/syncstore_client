@@ -254,7 +254,7 @@ class _RepoSyncEngine {
 
   Future<void> syncAll() async {
     try {
-      var nextMarker = null;
+      String? nextMarker;
       final serviceIds = <String>{};
       do {
         final ListResponse resp = await client.list('xbb', 'repo', limit: 50, marker: nextMarker);

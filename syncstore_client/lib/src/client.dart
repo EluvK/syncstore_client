@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'auth_interceptor.dart';
 import 'token_storage.dart';
@@ -16,6 +18,17 @@ class SyncStoreClient {
     final authSrv = AuthService(client, tokenStorage);
     client.interceptors.add(AuthInterceptor(tokenStorage, authSrv));
     return SyncStoreClient._(client, tokenStorage, authSrv);
+  }
+
+  Future<Uint8List> download(String url, {bool isPublic = false}) {
+    return perform(() async {
+      final options = isPublic ? Options(extra: {'skipAuthInterceptor': true}) : null;
+      final resp = await _dio.get<List<int>>(
+        url,
+        options: options?.copyWith(responseType: ResponseType.bytes) ?? Options(responseType: ResponseType.bytes),
+      );
+      return Uint8List.fromList(resp.data!);
+    });
   }
 
   Future<UserProfile> login(String username, String password) {
@@ -55,9 +68,9 @@ class SyncStoreClient {
     });
   }
 
-  Future<UserProfile> updateProfile(String userId, UserProfile profile) {
+  Future<UserProfile> updateProfile(String userId, UpdateUserProfileRequest newProfile) {
     return perform(() async {
-      final resp = await _dio.post('/user/profile/$userId', data: profile.toJson());
+      final resp = await _dio.post('/user/profile/$userId', data: newProfile.toJson());
       final data = resp.data as Map<String, dynamic>;
       return UserProfile.fromJson(data);
     });
