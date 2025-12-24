@@ -274,6 +274,10 @@ class _RepoSyncEngine {
             // local data is newer, need to sync to server
             localItem.syncStatus = SyncStatus.failed;
             await RepoRepository().updateToLocalDb(localItem);
+          } else if (localItem.syncStatus == SyncStatus.deleted) {
+            // same updatedAt but marked as deleted as local before
+            localItem.syncStatus = SyncStatus.archived;
+            await RepoRepository().updateToLocalDb(localItem);
           }
         }
       } while (nextMarker != null);

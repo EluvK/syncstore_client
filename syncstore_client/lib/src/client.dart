@@ -117,6 +117,7 @@ class SyncStoreClient {
     });
   }
 
+  /// delete data by id
   Future<void> delete(String namespace, String collection, String id) {
     return perform(() async {
       await _dio.delete('/data/$namespace/$collection/$id');
@@ -135,6 +136,29 @@ class SyncStoreClient {
       final resp = await _dio.get('/data/$namespace/$collection', queryParameters: query);
       final data = resp.data as Map<String, dynamic>;
       return ListResponse.fromJson(data);
+    });
+  }
+
+  /// --- ACL APIs ---
+  Future<List<Permission>> getAcls(String namespace, String collection, String id) {
+    return perform(() async {
+      final resp = await _dio.get('/acl/$namespace/$collection/$id');
+      final data = resp.data as Map<String, dynamic>;
+      final acls = data['permissions'] as List<dynamic>;
+      return acls.map((e) => Permission.fromJson(e as Map<String, dynamic>)).toList();
+    });
+  }
+
+  Future<void> updateAcls(String namespace, String collection, String id, List<Permission> permissions) {
+    return perform(() async {
+      final aclData = {'permissions': permissions.map((p) => p.toJson()).toList()};
+      await _dio.post('/acl/$namespace/$collection/$id', data: aclData);
+    });
+  }
+
+  Future<void> deleteAcls(String namespace, String collection, String id) {
+    return perform(() async {
+      await _dio.delete('/acl/$namespace/$collection/$id');
     });
   }
 }

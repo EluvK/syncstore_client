@@ -265,6 +265,10 @@ class _${className}SyncEngine {
             // local data is newer, need to sync to server
             localItem.syncStatus = SyncStatus.failed;
             await ${RepositoryType}().updateToLocalDb(localItem);
+          } else if (localItem.syncStatus == SyncStatus.deleted) {
+            // same updatedAt but marked as deleted as local before
+            localItem.syncStatus = SyncStatus.archived;
+            await ${RepositoryType}().updateToLocalDb(localItem);
           }
         }
       } while (nextMarker != null);

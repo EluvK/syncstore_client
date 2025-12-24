@@ -124,3 +124,17 @@ class ListResponse {
   factory ListResponse.fromJson(Map<String, dynamic> json) => _$ListResponseFromJson(json);
   Map<String, dynamic> toJson() => _$ListResponseToJson(this);
 }
+
+@JsonEnum(fieldRename: FieldRename.snake)
+enum AccessLevel { read, update, create, write, fullAccess }
+
+@JsonSerializable(fieldRename: FieldRename.snake)
+class Permission {
+  final String user;
+  final AccessLevel accessLevel;
+
+  Permission({required this.user, required this.accessLevel});
+
+  factory Permission.fromJson(Map<String, dynamic> json) => _$PermissionFromJson(json);
+  Map<String, dynamic> toJson() => _$PermissionToJson(this);
+}

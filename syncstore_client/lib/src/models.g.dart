@@ -108,3 +108,19 @@ Map<String, dynamic> _$ListResponseToJson(ListResponse instance) => <String, dyn
   'items': instance.items,
   'page_info': instance.pageInfo,
 };
+
+Permission _$PermissionFromJson(Map<String, dynamic> json) =>
+    Permission(user: json['user'] as String, accessLevel: $enumDecode(_$AccessLevelEnumMap, json['access_level']));
+
+Map<String, dynamic> _$PermissionToJson(Permission instance) => <String, dynamic>{
+  'user': instance.user,
+  'access_level': _$AccessLevelEnumMap[instance.accessLevel]!,
+};
+
+const _$AccessLevelEnumMap = {
+  AccessLevel.read: 'read',
+  AccessLevel.update: 'update',
+  AccessLevel.create: 'create',
+  AccessLevel.write: 'write',
+  AccessLevel.fullAccess: 'full_access',
+};
