@@ -118,6 +118,7 @@ Map<String, dynamic> _$PermissionToJson(Permission instance) => <String, dynamic
 };
 
 const _$AccessLevelEnumMap = {
+  AccessLevel.none: 'none',
   AccessLevel.read: 'read',
   AccessLevel.update: 'update',
   AccessLevel.create: 'create',

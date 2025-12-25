@@ -126,7 +126,14 @@ class ListResponse {
 }
 
 @JsonEnum(fieldRename: FieldRename.snake)
-enum AccessLevel { read, update, create, write, fullAccess }
+enum AccessLevel {
+  none, // `none` only exist at client side to make UI easier
+  read,
+  update,
+  create,
+  write,
+  fullAccess,
+}
 
 @JsonSerializable(fieldRename: FieldRename.snake)
 class Permission {

@@ -20,6 +20,16 @@ class ParentIdFilter implements DataItemFilter {
   }
 }
 
+class IdsFilter implements DataItemFilter {
+  final List<String> ids;
+  IdsFilter(this.ids);
+
+  @override
+  bool apply(DataItem<dynamic> item) {
+    return ids.contains(item.id);
+  }
+}
+
 enum StatusFilter implements DataItemFilter {
   synced,
   all;
