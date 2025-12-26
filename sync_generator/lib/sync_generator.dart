@@ -8,17 +8,39 @@ class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
   generateForAnnotatedElement(Element element, ConstantReader annotation, BuildStep buildStep) {
     if (element is! ClassElement) return '';
 
-    final className = element.name; // Repo
+    final className = element.name!;
     final collectionName = annotation.read('collectionName').stringValue;
     final tableName = annotation.read('tableName').stringValue;
     final dbType = annotation.read('db').typeValue.getDisplayString();
-    final DataItemType = '${className}DataItem';
-    final RepositoryType = '${className}Repository';
-    final ControllerType = '${className}Controller';
+
+    final bool generateAcl = annotation.peek('withAcl')?.boolValue ?? false;
+
+    final dataItemType = '${className}DataItem';
+    final repositoryType = '${className}Repository';
+    final controllerType = '${className}Controller';
     final activeItemId = 'current${className}Id';
-
     final extName = 'LocalStore$className';
+    final syncEngineType = '_${className}SyncEngine';
 
+    final buffer = StringBuffer();
+
+    buffer.writeln(_generateExtension(className, extName, tableName, dbType));
+    buffer.writeln('typedef $dataItemType = DataItem<$className>;\n');
+    buffer.writeln(_generateRepository(className, repositoryType, dataItemType, extName));
+    buffer.writeln(
+      _generateController(className, controllerType, dataItemType, repositoryType, syncEngineType, activeItemId),
+    );
+    if (generateAcl) {
+      // todo
+    }
+    buffer.writeln(
+      _generateSyncEngine(className, syncEngineType, dataItemType, repositoryType, collectionName, tableName),
+    );
+
+    return buffer.toString();
+  }
+
+  String _generateExtension(String className, String extName, String tableName, String dbType) {
     return '''
 extension $extName on $className {
   static String get tableName => '$tableName';
@@ -42,18 +64,20 @@ extension $extName on $className {
     return await $dbType().getDb();
   }
 }
+''';
+  }
 
-typedef ${DataItemType} = DataItem<$className>;
-
-class ${RepositoryType} {
-  Future<void> addToLocalDb(${DataItemType} item) async {
+  String _generateRepository(String className, String repositoryType, String dataItemType, String extName) {
+    return '''
+class $repositoryType {
+  Future<void> addToLocalDb($dataItemType item) async {
     final db = await $extName.getDb();
     await db.insert(
       $extName.tableName, item.toJson((r) => json.encode(r.toJson())),
     );
   }
 
-  Future<${DataItemType}?> getFromLocalDb(String id) async {
+  Future<$dataItemType?> getFromLocalDb(String id) async {
     final db = await $extName.getDb();
     final List<Map<String, dynamic>> maps = await db.query($extName.tableName, where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) {
@@ -62,7 +86,7 @@ class ${RepositoryType} {
     return null;
   }
 
-  Future<List<${DataItemType}>> listFromLocalDb({String? parentId}) async {
+  Future<List<$dataItemType>> listFromLocalDb({String? parentId}) async {
     final db = await $extName.getDb();
     final whereClauses = <String>[];
     final whereArgs = <dynamic>[];
@@ -88,7 +112,7 @@ class ${RepositoryType} {
     await db.delete($extName.tableName, where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<void> updateToLocalDb(${DataItemType} item) async {
+  Future<void> updateToLocalDb($dataItemType item) async {
     final db = await $extName.getDb();
     await db.update(
       $extName.tableName,
@@ -98,7 +122,7 @@ class ${RepositoryType} {
     );
   }
 
-  Future<void> upsertToLocalDb(${DataItemType} item) async {
+  Future<void> upsertToLocalDb($dataItemType item) async {
     if (await getFromLocalDb(item.id) == null) {
       await addToLocalDb(item);
     } else {
@@ -106,13 +130,24 @@ class ${RepositoryType} {
     }
   }
 }
+''';
+  }
 
-class ${ControllerType} extends GetxController {
+  String _generateController(
+    String className,
+    String controllerType,
+    String dataItemType,
+    String repositoryType,
+    String syncEngineType,
+    String activeItemId,
+  ) {
+    return '''
+class $controllerType extends GetxController {
   final SyncStoreClient client;
-  final _${className}SyncEngine _syncEngine;
-  ${ControllerType}(this.client) : _syncEngine = _${className}SyncEngine(client);
+  final $syncEngineType _syncEngine;
+  $controllerType(this.client) : _syncEngine = $syncEngineType(client);
 
-  final RxList<${DataItemType}> _items = <${DataItemType}>[].obs;
+  final RxList<$dataItemType> _items = <$dataItemType>[].obs;
   final Rx<String?> $activeItemId = Rx<String?>(null);
 
   @override
@@ -130,12 +165,12 @@ class ${ControllerType} extends GetxController {
     return;
   }
   Future<void> rebuildLocal() async {
-    _items.value = await ${RepositoryType}().listFromLocalDb();
+    _items.value = await $repositoryType().listFromLocalDb();
   }
-  void onSelect${className}(String id) {
+  void onSelect$className(String id) {
     $activeItemId.value = id;
   }
-  List<${DataItemType}> onView${className}s({List<DataItemFilter> filters = const []}) {
+  List<$dataItemType> onView${className}s({List<DataItemFilter> filters = const []}) {
     if (filters.isEmpty) {
       return _items;
     }
@@ -145,12 +180,11 @@ class ${ControllerType} extends GetxController {
     await _syncEngine.syncAll();
     await rebuildLocal();
   }
-  void _replaceLocal(String id, ${DataItemType} fetchedItem) {
+  void _replaceLocal(String id, $dataItemType fetchedItem) {
     final index = _items.indexWhere((item) => item.id == id);
     if (index != -1) {
       _items[index] = fetchedItem;
     }
-    // print('Replaced local $className with id: \$id, new id: \${fetchedItem.id}');
     if ($activeItemId.value == id && fetchedItem.id != id) {
       // update current selected id if changed by server generated id
       $activeItemId.value = fetchedItem.id;
@@ -159,7 +193,7 @@ class ${ControllerType} extends GetxController {
   void addData($className newData) {
     // generate a local uuid before successfully created on server
     final owner = client.currentUserId();
-    final newItem = ${DataItemType}.localNew(owner, newData);
+    final newItem = $dataItemType.localNew(owner, newData);
     // it's a temporary memory data, not even in local db yet.
     _items.add(newItem); 
     _syncEngine.create(newItem).then((fetchedItem) {
@@ -177,7 +211,7 @@ class ${ControllerType} extends GetxController {
   }
   void onUpdateLocalField(String id) {
     final item = _items.firstWhere((item) => item.id == id);
-    ${RepositoryType}().updateToLocalDb(item);
+    $repositoryType().updateToLocalDb(item);
   }
   void deleteData(String id) {
     _items.removeWhere((item) => item.id == id);
@@ -188,55 +222,64 @@ class ${ControllerType} extends GetxController {
     _syncEngine.delete(id, status != SyncStatus.deleted);
   }
 }
+''';
+  }
 
-class _${className}SyncEngine {
+  String _generateSyncEngine(
+    String className,
+    String syncEngineType,
+    String dataItemType,
+    String repositoryType,
+    String collectionName,
+    String tableName,
+  ) {
+    return '''
+class $syncEngineType {
   final SyncStoreClient client;
-  _${className}SyncEngine(this.client);
+  $syncEngineType(this.client);
 
-  Future<${DataItemType}> create(${DataItemType} local) async {
+  Future<$dataItemType> create($dataItemType local) async {
     local.syncStatus = SyncStatus.syncing;
-    await ${RepositoryType}().addToLocalDb(local);
+    await $repositoryType().addToLocalDb(local);
 
-    ${DataItemType} createdItem;
+    $dataItemType createdItem;
     try {
       final newId = await client.create('$collectionName', '$tableName', local.body.toJson());
       createdItem = await client.get<$className>('$collectionName', '$tableName', newId, $className.fromJson);
     } catch (e) {
       local.syncStatus = SyncStatus.failed;
-      await ${RepositoryType}().updateToLocalDb(local);
+      await $repositoryType().updateToLocalDb(local);
       rethrow;
     }
     createdItem.syncStatus = SyncStatus.archived;
     createdItem.colorTag = local.colorTag;
 
-    await ${RepositoryType}().deleteFromLocalDb(local.id);
-    await ${RepositoryType}().addToLocalDb(createdItem);
+    await $repositoryType().deleteFromLocalDb(local.id);
+    await $repositoryType().addToLocalDb(createdItem);
     return createdItem;
   }
-  Future<${DataItemType}> update(${DataItemType} local) async {
+  Future<$dataItemType> update($dataItemType local) async {
     local.syncStatus = SyncStatus.syncing;
-    await ${RepositoryType}().updateToLocalDb(local);
+    await $repositoryType().updateToLocalDb(local);
 
-    ${DataItemType} updatedItem;
+    $dataItemType updatedItem;
     try {
       await client.update('$collectionName', '$tableName', local.id, local.body.toJson());
       updatedItem = await client.get<$className>('$collectionName', '$tableName', local.id, $className.fromJson);
     } catch (e) {
       local.syncStatus = SyncStatus.failed;
-      await ${RepositoryType}().updateToLocalDb(local);
+      await $repositoryType().updateToLocalDb(local);
       rethrow;
     }
     updatedItem.syncStatus = SyncStatus.archived;
     updatedItem.colorTag = local.colorTag;
     
-    await ${RepositoryType}().updateToLocalDb(updatedItem);
+    await $repositoryType().updateToLocalDb(updatedItem);
     return updatedItem;
   }
   void delete(String id, bool deleteFromServer) {
-    ${RepositoryType}().deleteFromLocalDb(id);
-    if (!deleteFromServer) {
-      return;
-    }
+    $repositoryType().deleteFromLocalDb(id);
+    if (!deleteFromServer) return;
     try {
       client.delete('$collectionName', '$tableName', id);
     } catch (e) {
@@ -252,32 +295,32 @@ class _${className}SyncEngine {
         nextMarker = resp.pageInfo.nextMarker;
         for (var summary in resp.items) {
           serviceIds.add(summary.id);
-          final ${DataItemType}? localItem = await ${RepositoryType}().getFromLocalDb(summary.id);
+          final $dataItemType? localItem = await $repositoryType().getFromLocalDb(summary.id);
           if (localItem == null) {
             // new from server
-            final ${DataItemType} item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
-            await ${RepositoryType}().addToLocalDb(item);
+            final $dataItemType item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
+            await $repositoryType().addToLocalDb(item);
           } else if (localItem.updatedAt.isBefore(summary.updatedAt)) {
             // update local data.
-            final ${DataItemType} item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
-            await ${RepositoryType}().updateToLocalDb(item);
+            final $dataItemType item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
+            await $repositoryType().updateToLocalDb(item);
           } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
             // local data is newer, need to sync to server
             localItem.syncStatus = SyncStatus.failed;
-            await ${RepositoryType}().updateToLocalDb(localItem);
+            await $repositoryType().updateToLocalDb(localItem);
           } else if (localItem.syncStatus == SyncStatus.deleted) {
             // same updatedAt but marked as deleted as local before
             localItem.syncStatus = SyncStatus.archived;
-            await ${RepositoryType}().updateToLocalDb(localItem);
+            await $repositoryType().updateToLocalDb(localItem);
           }
         }
       } while (nextMarker != null);
       // clean up local data that are deleted from server
-      final localItems = await ${RepositoryType}().listFromLocalDb();
-      for (${DataItemType} localItem in localItems) {
+      final localItems = await $repositoryType().listFromLocalDb();
+      for ($dataItemType localItem in localItems) {
         if (!serviceIds.contains(localItem.id)) {
           localItem.syncStatus = SyncStatus.deleted;
-          await ${RepositoryType}().updateToLocalDb(localItem);
+          await $repositoryType().updateToLocalDb(localItem);
         }
       }
     } catch (e) {
