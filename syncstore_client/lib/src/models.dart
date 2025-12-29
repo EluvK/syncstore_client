@@ -145,3 +145,11 @@ class Permission {
   factory Permission.fromJson(Map<String, dynamic> json) => _$PermissionFromJson(json);
   Map<String, dynamic> toJson() => _$PermissionToJson(this);
 }
+
+// --- ACL DataBase Requires ---
+const String onCreateTableAcl = """
+CREATE TABLE IF NOT EXISTS acl (
+  data_id TEXT PRIMARY KEY,
+  permissions TEXT NOT NULL
+);
+""";

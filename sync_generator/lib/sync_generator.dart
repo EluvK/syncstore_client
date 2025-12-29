@@ -12,8 +12,7 @@ class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
     final collectionName = annotation.read('collectionName').stringValue;
     final tableName = annotation.read('tableName').stringValue;
     final dbType = annotation.read('db').typeValue.getDisplayString();
-
-    final bool generateAcl = annotation.peek('withAcl')?.boolValue ?? false;
+    final bool generateAcl = annotation.read('withAcls').boolValue;
 
     final dataItemType = '${className}DataItem';
     final repositoryType = '${className}Repository';
@@ -31,7 +30,7 @@ class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
       _generateController(className, controllerType, dataItemType, repositoryType, syncEngineType, activeItemId),
     );
     if (generateAcl) {
-      // todo
+      buffer.writeln(_generateAclExtension(repositoryType, controllerType, extName, tableName));
     }
     buffer.writeln(
       _generateSyncEngine(className, syncEngineType, dataItemType, repositoryType, collectionName, tableName),
@@ -329,6 +328,53 @@ class $syncEngineType {
     }
   }
 }
+''';
+  }
+
+  String _generateAclExtension(String repositoryType, String controllerType, String extName, String tableName) {
+    return '''
+extension ${repositoryType}Acl on $repositoryType {
+  static String get tableNameAcl => 'acl';
+  Future<List<Permission>> getAcls(String dataId) async {
+    final db = await $extName.getDb();
+    final List<Map<String, dynamic>> maps = await db.query(tableNameAcl, where: 'data_id = ?', whereArgs: [dataId]);
+    if (maps.isEmpty) {
+      return [];
+    }
+    final permissionsJson = maps.first['permissions'] as String;
+    final List<dynamic> permissionsList = json.decode(permissionsJson) as List<dynamic>;
+    return permissionsList.map((e) => Permission.fromJson(e as Map<String, dynamic>)).toList();
+  }
+  Future<void> setAcls(String dataId, List<Permission> permissions) async {
+    final db = await $extName.getDb();
+    final permissionsJson = json.encode(permissions.map((e) => e.toJson()).toList());
+    await db.insert(tableNameAcl, {
+      'data_id': dataId,
+      'permissions': permissionsJson,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+}
+extension ${controllerType}Acl on ${controllerType} {
+  Future<List<Permission>> getAcls(String dataId) async {
+    try {
+      final List<Permission> getAcls = await client.getAcls('xbb', '$tableName', dataId);
+      await ${repositoryType}().setAcls(dataId, getAcls);
+      return getAcls;
+    } catch (e) {
+      print("Error fetching ACLs from server: \$e");
+      return await ${repositoryType}().getAcls(dataId);
+    }
+  }
+  Future<void> setAcls(String dataId, List<Permission> permissions) async {
+    try {
+      await client.updateAcls('xbb', '$tableName', dataId, permissions);
+      await ${repositoryType}().setAcls(dataId, permissions);
+    } catch (e) {
+      print("Error updating ACLs to server: \$e");
+    }
+  }
+}
+
 ''';
   }
 }
