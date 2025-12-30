@@ -151,7 +151,9 @@ class SyncStoreClient {
 
   Future<void> updateAcls(String namespace, String collection, String id, List<Permission> permissions) {
     return perform(() async {
-      final aclData = {'permissions': permissions.map((p) => p.toJson()).toList()};
+      final aclData = {
+        'permissions': permissions.where((p) => p.accessLevel != AccessLevel.none).map((p) => p.toJson()).toList(),
+      };
       await _dio.post('/acl/$namespace/$collection/$id', data: aclData);
     });
   }
