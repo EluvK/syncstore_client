@@ -175,9 +175,14 @@ class $controllerType extends GetxController {
     }
     return _items.where((item) => filters.every((filter) => filter.apply(item))).toList();
   }
-  Future<void> trySyncAll() async {
-    await _syncEngine.syncAll();
-    await rebuildLocal();
+  Future<void> syncChildren(String parentId) async {
+    await _syncEngine.syncChildren(parentId);
+  }
+  Future<void> syncOwned() async {
+    await _syncEngine.syncOwned();
+  }
+  Future<void> syncGranted() async {
+    await _syncEngine.syncGranted();
   }
   void _replaceLocal(String id, $dataItemType fetchedItem) {
     final index = _items.indexWhere((item) => item.id == id);
@@ -212,13 +217,13 @@ class $controllerType extends GetxController {
     final item = _items.firstWhere((item) => item.id == id);
     $repositoryType().updateToLocalDb(item);
   }
-  void deleteData(String id) {
+  void deleteData(String id, {bool deleteFromServer = false}) {
     _items.removeWhere((item) => item.id == id);
     if ($activeItemId.value == id) {
       $activeItemId.value = null;
     }
     final status = _items.firstWhereOrNull((item) => item.id == id)?.syncStatus;
-    _syncEngine.delete(id, status != SyncStatus.deleted);
+    _syncEngine.delete(id, deleteFromServer ? true : status != SyncStatus.deleted);
   }
 }
 ''';
@@ -285,7 +290,8 @@ class $syncEngineType {
       rethrow;
     }
   }
-  Future<void> syncAll() async {
+  Future<void> syncOwned() async {
+    final currentUserId = client.currentUserId();
     try {
       String? nextMarker;
       final serviceIds = <String>{};
@@ -295,27 +301,71 @@ class $syncEngineType {
         for (var summary in resp.items) {
           serviceIds.add(summary.id);
           final $dataItemType? localItem = await $repositoryType().getFromLocalDb(summary.id);
-          if (localItem == null) {
-            // new from server
-            final $dataItemType item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
-            await $repositoryType().addToLocalDb(item);
-          } else if (localItem.updatedAt.isBefore(summary.updatedAt)) {
-            // update local data.
-            final $dataItemType item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
-            await $repositoryType().updateToLocalDb(item);
-          } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
-            // local data is newer, need to sync to server
-            localItem.syncStatus = SyncStatus.failed;
-            await $repositoryType().updateToLocalDb(localItem);
-          } else if (localItem.syncStatus == SyncStatus.deleted) {
-            // same updatedAt but marked as deleted as local before
-            localItem.syncStatus = SyncStatus.archived;
-            await $repositoryType().updateToLocalDb(localItem);
-          }
+          await _compareRemote(localItem, summary);
         }
       } while (nextMarker != null);
       // clean up local data that are deleted from server
       final localItems = await $repositoryType().listFromLocalDb();
+      for ($dataItemType localItem in localItems) {
+        if (localItem.owner != currentUserId) {
+          continue;
+        }
+        if (!serviceIds.contains(localItem.id)) {
+          localItem.syncStatus = SyncStatus.deleted;
+          await $repositoryType().updateToLocalDb(localItem);
+        }
+      }
+    } catch (e) {
+      // todo more error handling?
+      rethrow;
+    }
+  }
+  Future<void> syncGranted() async {
+    final currentUserId = client.currentUserId();
+    try {
+      String? nextMarker;
+      final serviceIds = <String>{};
+      do {
+        final ListResponse resp = await client.list('$collectionName', '$tableName', withPermission: true, limit: 50, marker: nextMarker);
+        nextMarker = resp.pageInfo.nextMarker;
+        for (var summary in resp.items) {
+          serviceIds.add(summary.id);
+          final $dataItemType? localItem = await $repositoryType().getFromLocalDb(summary.id);
+          await _compareRemote(localItem, summary);
+        }
+      } while (nextMarker != null);
+      // clean up local data that are deleted from server
+      final localItems = await $repositoryType().listFromLocalDb();
+      for ($dataItemType localItem in localItems) {
+        if (localItem.owner == currentUserId) {
+          continue;
+        }
+        if (!serviceIds.contains(localItem.id)) {
+          localItem.syncStatus = SyncStatus.deleted;
+          await $repositoryType().updateToLocalDb(localItem);
+        }
+      }
+    } catch (e) {
+      // todo more error handling?
+      rethrow;
+    }
+  }
+
+  Future<void> syncChildren(String parentId) async {
+    try {
+      String? nextMarker;
+      final serviceIds = <String>{};
+      do {
+        final ListResponse resp = await client.list('$collectionName', '$tableName', parentId: parentId, limit: 50, marker: nextMarker);
+        nextMarker = resp.pageInfo.nextMarker;
+        for (var summary in resp.items) {
+          serviceIds.add(summary.id);
+          final $dataItemType? localItem = await $repositoryType().getFromLocalDb(summary.id);
+          await _compareRemote(localItem, summary);
+        }
+      } while (nextMarker != null);
+      // clean up local data that are deleted from server
+      final localItems = await $repositoryType().listFromLocalDb(parentId: parentId);
       for ($dataItemType localItem in localItems) {
         if (!serviceIds.contains(localItem.id)) {
           localItem.syncStatus = SyncStatus.deleted;
@@ -325,6 +375,26 @@ class $syncEngineType {
     } catch (e) {
       // todo more error handling?
       rethrow;
+    }
+  }
+
+  Future<void> _compareRemote($dataItemType? localItem, DataItemSummary summary) async {
+    if (localItem == null) {
+      // new from server
+      final $dataItemType item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
+      await $repositoryType().addToLocalDb(item);
+    } else if (localItem.updatedAt.isBefore(summary.updatedAt)) {
+      // update local data.
+      final $dataItemType item = await client.get<$className>('$collectionName', '$tableName', summary.id, $className.fromJson);
+      await $repositoryType().updateToLocalDb(item);
+    } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
+      // local data is newer, need to sync to server
+      localItem.syncStatus = SyncStatus.failed;
+      await $repositoryType().updateToLocalDb(localItem);
+    } else if (localItem.syncStatus == SyncStatus.deleted) {
+      // same updatedAt but marked as deleted as local before
+      localItem.syncStatus = SyncStatus.archived;
+      await $repositoryType().updateToLocalDb(localItem);
     }
   }
 }

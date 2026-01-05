@@ -125,11 +125,19 @@ class SyncStoreClient {
   }
 
   /// list with optional parentId, marker, limit
-  Future<ListResponse> list(String namespace, String collection, {String? parentId, String? marker, int limit = 50}) {
+  Future<ListResponse> list(
+    String namespace,
+    String collection, {
+    String? parentId,
+    String? marker,
+    bool withPermission = false,
+    int limit = 50,
+  }) {
     return perform(() async {
       final query = <String, dynamic>{
         if (parentId != null) 'parent_id': parentId,
         if (marker != null) 'marker': marker,
+        if (withPermission) 'permission': true,
         'limit': limit,
       };
 

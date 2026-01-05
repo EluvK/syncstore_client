@@ -38,7 +38,8 @@ void main() async {
   await controller.ensureInitialization();
 
   print("0. Syncing all repos from server...");
-  await controller.trySyncAll();
+  await controller.syncOwned();
+  await controller.rebuildLocal();
 
   // try update one of the local repos (if any)
   final viewRepos = controller.onViewRepos();
