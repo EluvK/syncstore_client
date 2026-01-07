@@ -29,7 +29,7 @@ class UpdateUserProfileRequest {
 
 // --- Data Models ---
 
-enum SyncStatus { failed, deleted, pending, syncing, synced, archived }
+enum SyncStatus { failed, deleted, hidden, pending, syncing, synced, archived }
 
 enum ColorTag { none, red, orange, yellow, green, blue, gray }
 
@@ -150,6 +150,7 @@ class Permission {
 const String onCreateTableAcl = """
 CREATE TABLE IF NOT EXISTS acl (
   data_id TEXT PRIMARY KEY,
+  data_collection TEXT NOT NULL,
   permissions TEXT NOT NULL
 );
 """;

@@ -32,15 +32,15 @@ class IdsFilter implements DataItemFilter {
 
 enum StatusFilter implements DataItemFilter {
   synced,
-  all;
+  notHidden;
 
   @override
   bool apply(DataItem<dynamic> item) {
     switch (this) {
       case StatusFilter.synced:
         return item.syncStatus == SyncStatus.synced;
-      case StatusFilter.all:
-        return true;
+      case StatusFilter.notHidden:
+        return item.syncStatus != SyncStatus.hidden;
     }
   }
 }

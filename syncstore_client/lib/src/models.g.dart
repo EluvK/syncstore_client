@@ -57,6 +57,7 @@ Map<String, dynamic> _$DataItemToJson<T>(DataItem<T> instance, Object? Function(
 const _$SyncStatusEnumMap = {
   SyncStatus.failed: 'failed',
   SyncStatus.deleted: 'deleted',
+  SyncStatus.hidden: 'hidden',
   SyncStatus.pending: 'pending',
   SyncStatus.syncing: 'syncing',
   SyncStatus.synced: 'synced',

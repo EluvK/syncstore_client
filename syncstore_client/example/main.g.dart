@@ -308,7 +308,7 @@ class _RepoSyncEngine {
           continue;
         }
         if (!serviceIds.contains(localItem.id)) {
-          localItem.syncStatus = SyncStatus.deleted;
+          localItem.syncStatus = SyncStatus.hidden;
           await RepoRepository().updateToLocalDb(localItem);
         }
       }
@@ -358,8 +358,8 @@ class _RepoSyncEngine {
       // local data is newer, need to sync to server
       localItem.syncStatus = SyncStatus.failed;
       await RepoRepository().updateToLocalDb(localItem);
-    } else if (localItem.syncStatus == SyncStatus.deleted) {
-      // same updatedAt but marked as deleted as local before
+    } else if (localItem.syncStatus == SyncStatus.deleted || localItem.syncStatus == SyncStatus.hidden) {
+      // same updatedAt but marked as special status, need to sync to server
       localItem.syncStatus = SyncStatus.archived;
       await RepoRepository().updateToLocalDb(localItem);
     }

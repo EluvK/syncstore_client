@@ -341,7 +341,7 @@ class $syncEngineType {
           continue;
         }
         if (!serviceIds.contains(localItem.id)) {
-          localItem.syncStatus = SyncStatus.deleted;
+          localItem.syncStatus = SyncStatus.hidden;
           await $repositoryType().updateToLocalDb(localItem);
         }
       }
@@ -391,8 +391,8 @@ class $syncEngineType {
       // local data is newer, need to sync to server
       localItem.syncStatus = SyncStatus.failed;
       await $repositoryType().updateToLocalDb(localItem);
-    } else if (localItem.syncStatus == SyncStatus.deleted) {
-      // same updatedAt but marked as deleted as local before
+    } else if (localItem.syncStatus == SyncStatus.deleted || localItem.syncStatus == SyncStatus.hidden) {
+      // same updatedAt but marked as special status, need to sync to server
       localItem.syncStatus = SyncStatus.archived;
       await $repositoryType().updateToLocalDb(localItem);
     }
@@ -407,7 +407,11 @@ extension ${repositoryType}Acl on $repositoryType {
   static String get tableNameAcl => 'acl';
   Future<List<Permission>> getAcls(String dataId) async {
     final db = await $extName.getDb();
-    final List<Map<String, dynamic>> maps = await db.query(tableNameAcl, where: 'data_id = ?', whereArgs: [dataId]);
+    final List<Map<String, dynamic>> maps = await db.query(
+      tableNameAcl,
+      where: 'data_id = ? AND data_collection = ?',
+      whereArgs: [dataId, '$tableName'],
+    );
     if (maps.isEmpty) {
       return [];
     }
@@ -420,6 +424,7 @@ extension ${repositoryType}Acl on $repositoryType {
     final permissionsJson = json.encode(permissions.map((e) => e.toJson()).toList());
     await db.insert(tableNameAcl, {
       'data_id': dataId,
+      'data_collection': '$tableName',
       'permissions': permissionsJson,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
