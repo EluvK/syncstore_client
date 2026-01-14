@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:get/get.dart';
 import 'package:path/path.dart';
@@ -17,10 +18,35 @@ Future<void> debug() async {
   // print('Current repos count: ${currentRepos.length}');
   // print('Debugging done.');
 }
+void test_hpke() async {
+  final aad = Uint8List.fromList("/api/data/xbb/repo".codeUnits);
+  final message = Uint8List.fromList("null".codeUnits);
+  print("message: $message");
+
+  // final keyPair = await X25519Kem().fixKeyPair();
+  final keyPair = await X25519Kem().newKeyPair();
+  final extractedPub = await keyPair.extractPublicKey();
+  print("Generated Public Key: ${base64Encode(extractedPub.bytes)}");
+  final extractedPriv = await keyPair.extractPrivateKeyBytes();
+  print("Generated Private Key: ${base64Encode(extractedPriv)}");
+
+  final r = await HpkeBase().seal(plaintext: message, recipientPub: extractedPub, aad: aad);
+  print("Sealed ciphertext: ${base64Encode(r.$2)}");
+  print("Ephemeral Public Key: ${base64Encode(r.$1)}");
+
+  final opened = await HpkeBase().open(
+    enc: r.$1,
+    ciphertext: r.$2,
+    recipientKeyPair: keyPair,
+    recipientPub: extractedPub,
+    aad: aad,
+  );
+  print("Opened plaintext: ${utf8.decode(opened)}");
+}
 
 void main() async {
   final storage = InMemoryTokenStorage();
-  final client = SyncStoreClient(baseUrl: 'http://localhost:1011/api', tokenStorage: storage);
+  final client = SyncStoreClient(baseUrl: 'http://localhost:1011/api', tokenStorage: storage, enableHpke: false);
   try {
     await client.login('test', 'password');
     print('Login successful');

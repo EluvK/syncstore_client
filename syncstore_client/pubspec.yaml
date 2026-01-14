@@ -10,6 +10,8 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
+  cryptography: ^2.9.0
+  cryptography_flutter: ^2.3.4
   dio: ^5.0.0
   json_annotation: ^4.9.0
   sqlite3: ^3.1.0

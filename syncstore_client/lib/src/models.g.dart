@@ -10,12 +10,14 @@ UserProfile _$UserProfileFromJson(Map<String, dynamic> json) => UserProfile(
   userId: json['user_id'] as String,
   name: json['name'] as String,
   avatarUrl: json['avatar_url'] as String?,
+  publicKey: json['public_key'] as String,
 );
 
 Map<String, dynamic> _$UserProfileToJson(UserProfile instance) => <String, dynamic>{
   'user_id': instance.userId,
   'name': instance.name,
   'avatar_url': instance.avatarUrl,
+  'public_key': instance.publicKey,
 };
 
 UpdateUserProfileRequest _$UpdateUserProfileRequestFromJson(Map<String, dynamic> json) => UpdateUserProfileRequest(

@@ -10,8 +10,9 @@ class UserProfile {
   final String userId;
   final String name;
   final String? avatarUrl;
+  final String publicKey;
 
-  UserProfile({required this.userId, required this.name, this.avatarUrl});
+  UserProfile({required this.userId, required this.name, this.avatarUrl, required this.publicKey});
   factory UserProfile.fromJson(Map<String, dynamic> json) => _$UserProfileFromJson(json);
   Map<String, dynamic> toJson() => _$UserProfileToJson(this);
 }

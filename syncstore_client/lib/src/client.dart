@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'auth_interceptor.dart';
+import 'hpke_interceptor.dart';
 import 'token_storage.dart';
 import 'models.dart';
 import 'errors.dart';
@@ -10,23 +11,49 @@ class SyncStoreClient {
   final Dio _dio;
   final TokenStorage tokenStorage;
   final AuthService authService;
+  final bool enableHpke;
 
-  SyncStoreClient._(this._dio, this.tokenStorage, this.authService);
+  SyncStoreClient._(this._dio, this.tokenStorage, this.authService, this.enableHpke);
 
-  factory SyncStoreClient({required String baseUrl, required TokenStorage tokenStorage, Dio? dio}) {
+  factory SyncStoreClient({
+    required String baseUrl,
+    required TokenStorage tokenStorage,
+    required bool enableHpke,
+    Dio? dio,
+  }) {
     final client = dio ?? Dio(BaseOptions(baseUrl: baseUrl));
     final authSrv = AuthService(client, tokenStorage);
     client.interceptors.add(AuthInterceptor(tokenStorage, authSrv));
-    return SyncStoreClient._(client, tokenStorage, authSrv);
+    if (enableHpke) {
+      // try to get existing public key from storage
+      tokenStorage.getHpkePubKey().then((publicKey) {
+        if (publicKey != null) {
+          client.interceptors.add(HpkeInterceptor(publicKey));
+        }
+      });
+    }
+    return SyncStoreClient._(client, tokenStorage, authSrv, enableHpke);
+  }
+
+  // helper function to build Options for request
+  Options _buildOptions({bool skipAuth = false, bool skipHpke = false, ResponseType responseType = ResponseType.json}) {
+    final extra = <String, dynamic>{};
+    if (skipAuth) {
+      extra['skipAuthInterceptor'] = true;
+    }
+    if (enableHpke && !skipHpke && _dio.interceptors.any((element) => element is HpkeInterceptor)) {
+      extra['secureHpke'] = true;
+      responseType = ResponseType.bytes;
+    }
+    return Options(extra: extra, responseType: responseType);
   }
 
   Future<Uint8List> download(String url, {bool isPublic = false}) {
     return perform(() async {
-      final options = isPublic ? Options(extra: {'skipAuthInterceptor': true}) : null;
-      final resp = await _dio.get<List<int>>(
-        url,
-        options: options?.copyWith(responseType: ResponseType.bytes) ?? Options(responseType: ResponseType.bytes),
-      );
+      // public download does not need auth, enable skip auth.
+      // not support hpke for public download for now.
+      final options = _buildOptions(skipAuth: isPublic, skipHpke: true, responseType: ResponseType.bytes);
+      final resp = await _dio.get<List<int>>(url, options: options);
       return Uint8List.fromList(resp.data!);
     });
   }
@@ -55,22 +82,31 @@ class SyncStoreClient {
 
   Future<bool> checkHealth() {
     return perform(() async {
-      final resp = await _dio.get('/health', options: Options(extra: {'skipAuthInterceptor': true}));
+      final resp = await _dio.get('/health', options: _buildOptions(skipAuth: true, skipHpke: true));
       return resp.statusCode == 200;
     });
   }
 
   Future<UserProfile> getProfile(String userId) {
     return perform(() async {
-      final resp = await _dio.get('/user/profile/$userId');
+      // in case of first time login, we need to skip hpke to get public key?
+      // this api can be no harm called without hpke.
+      final resp = await _dio.get('/user/profile/$userId', options: _buildOptions(skipHpke: true));
       final data = resp.data as Map<String, dynamic>;
-      return UserProfile.fromJson(data);
+      final userProfile = UserProfile.fromJson(data);
+      tokenStorage.setHpkePubKey(userProfile.publicKey);
+      // update HpkeInterceptor with new public key if needed
+      final publicKey = await tokenStorage.getHpkePubKey();
+      if (publicKey == null) return userProfile;
+      _dio.interceptors.removeWhere((element) => element is HpkeInterceptor);
+      _dio.interceptors.add(HpkeInterceptor(publicKey));
+      return userProfile;
     });
   }
 
   Future<UserProfile> updateProfile(String userId, UpdateUserProfileRequest newProfile) {
     return perform(() async {
-      final resp = await _dio.post('/user/profile/$userId', data: newProfile.toJson());
+      final resp = await _dio.post('/user/profile/$userId', data: newProfile.toJson(), options: _buildOptions());
       final data = resp.data as Map<String, dynamic>;
       return UserProfile.fromJson(data);
     });
@@ -78,7 +114,7 @@ class SyncStoreClient {
 
   Future<List<UserProfile>> getFriends() {
     return perform(() async {
-      final resp = await _dio.get('/user/friends');
+      final resp = await _dio.get('/user/friends', options: _buildOptions());
       final data = resp.data as Map<String, dynamic>;
       final friends = data['friends'] as List<dynamic>;
       return friends.map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
@@ -90,7 +126,7 @@ class SyncStoreClient {
   /// create new data, returns meta id
   Future<String> create(String namespace, String collection, Map<String, dynamic> body) {
     return perform(() async {
-      final resp = await _dio.post('/data/$namespace/$collection', data: body);
+      final resp = await _dio.post('/data/$namespace/$collection', data: body, options: _buildOptions());
       return resp.data as String;
     });
   }
@@ -103,7 +139,7 @@ class SyncStoreClient {
     T Function(Map<String, dynamic>) fromJson,
   ) {
     return perform(() async {
-      final resp = await _dio.get('/data/$namespace/$collection/$id');
+      final resp = await _dio.get('/data/$namespace/$collection/$id', options: _buildOptions());
       final fromJsonT = (Object? json) => fromJson(json as Map<String, dynamic>);
       return DataItem<T>.fromJson(resp.data, fromJsonT);
     });
@@ -112,7 +148,7 @@ class SyncStoreClient {
   /// update data by id
   Future<String> update(String namespace, String collection, String id, Map<String, dynamic> body) {
     return perform(() async {
-      final resp = await _dio.post('/data/$namespace/$collection/$id', data: body);
+      final resp = await _dio.post('/data/$namespace/$collection/$id', data: body, options: _buildOptions());
       return resp.data as String;
     });
   }
@@ -120,7 +156,7 @@ class SyncStoreClient {
   /// delete data by id
   Future<void> delete(String namespace, String collection, String id) {
     return perform(() async {
-      await _dio.delete('/data/$namespace/$collection/$id');
+      await _dio.delete('/data/$namespace/$collection/$id', options: _buildOptions());
     });
   }
 
@@ -140,8 +176,7 @@ class SyncStoreClient {
         if (withPermission) 'permission': true,
         'limit': limit,
       };
-
-      final resp = await _dio.get('/data/$namespace/$collection', queryParameters: query);
+      final resp = await _dio.get('/data/$namespace/$collection', queryParameters: query, options: _buildOptions());
       final data = resp.data as Map<String, dynamic>;
       return ListResponse.fromJson(data);
     });
@@ -150,7 +185,7 @@ class SyncStoreClient {
   /// --- ACL APIs ---
   Future<List<Permission>> getAcls(String namespace, String collection, String id) {
     return perform(() async {
-      final resp = await _dio.get('/acl/$namespace/$collection/$id');
+      final resp = await _dio.get('/acl/$namespace/$collection/$id', options: _buildOptions());
       final data = resp.data as Map<String, dynamic>;
       final acls = data['permissions'] as List<dynamic>;
       return acls.map((e) => Permission.fromJson(e as Map<String, dynamic>)).toList();
@@ -162,13 +197,13 @@ class SyncStoreClient {
       final aclData = {
         'permissions': permissions.where((p) => p.accessLevel != AccessLevel.none).map((p) => p.toJson()).toList(),
       };
-      await _dio.post('/acl/$namespace/$collection/$id', data: aclData);
+      await _dio.post('/acl/$namespace/$collection/$id', data: aclData, options: _buildOptions());
     });
   }
 
   Future<void> deleteAcls(String namespace, String collection, String id) {
     return perform(() async {
-      await _dio.delete('/acl/$namespace/$collection/$id');
+      await _dio.delete('/acl/$namespace/$collection/$id', options: _buildOptions());
     });
   }
 }
@@ -184,7 +219,7 @@ class AuthService {
       final resp = await dio.post(
         '/auth/name-login',
         data: {'username': username, 'password': password},
-        options: Options(extra: {'skipAuthInterceptor': true}),
+        options: Options(extra: {'skipAuthInterceptor': true, 'skipHpke': true}),
       );
       final data = _normalizeResp(resp);
       _persistTokens(data);
@@ -203,7 +238,7 @@ class AuthService {
       final resp = await dio.post(
         '/auth/refresh',
         data: {'refresh_token': refreshToken},
-        options: Options(extra: {'skipAuthInterceptor': true}),
+        options: Options(extra: {'skipAuthInterceptor': true, 'skipHpke': true}),
       );
       final data = _normalizeResp(resp);
       _persistTokens(data);

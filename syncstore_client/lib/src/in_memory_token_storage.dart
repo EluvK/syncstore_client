@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:cryptography/cryptography.dart' show PublicKey, KeyPairType, SimplePublicKey;
+
 import 'token_storage.dart';
 
 class InMemoryTokenStorage implements TokenStorage {
@@ -7,6 +10,7 @@ class InMemoryTokenStorage implements TokenStorage {
   String? _refresh;
   DateTime? _accessExpiry;
   DateTime? _refreshExpiry;
+  PublicKey? _hpkePubKey;
 
   @override
   Future<String?> getAccessToken() async {
@@ -46,6 +50,17 @@ class InMemoryTokenStorage implements TokenStorage {
   Future<void> setRefreshToken(String token, {DateTime? expiry}) async {
     _refresh = token;
     _refreshExpiry = expiry;
+  }
+
+  @override
+  Future<void> setHpkePubKey(String pubKeyBase64) async {
+    final bytes = base64Decode(pubKeyBase64);
+    _hpkePubKey = SimplePublicKey(bytes, type: KeyPairType.x25519);
+  }
+
+  @override
+  Future<PublicKey?> getHpkePubKey() {
+    return Future.value(_hpkePubKey);
   }
 
   @override

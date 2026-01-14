@@ -35,16 +35,14 @@ class AuthInterceptor extends Interceptor {
       handler.next(options);
     } else {
       // no access token available, should cancel the request
-      handler.reject(
-        DioException(requestOptions: options, error: ApiError.loginRequired),
-      );
+      handler.reject(DioException(requestOptions: options, error: ApiError.loginRequired));
     }
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     // auth request should not trigger refresh
-    if (err.requestOptions.extra['skipAuthInterceptor'] == true) {
+    if (err.requestOptions.extra['skipAuthInterceptor'] == true || err.requestOptions.extra['secureHpke'] == true) {
       handler.next(err);
       return;
     }
@@ -81,9 +79,7 @@ class AuthInterceptor extends Interceptor {
         } else {
           // refresh failed: clear storage and raise AuthException
           await _storage.clear();
-          handler.next(
-            DioException(requestOptions: requestOptions, error: ApiError.loginRequired),
-          );
+          handler.next(DioException(requestOptions: requestOptions, error: ApiError.loginRequired));
           return;
         }
       } catch (e) {
