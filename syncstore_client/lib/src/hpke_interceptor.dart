@@ -266,7 +266,7 @@ class HpkeInterceptor extends Interceptor {
 
       // 2. encrypt the request body
       final aad = utf8.encode('/api' + Uri.parse(options.path).path);
-      final payload = options.data is List<int> ? options.data : utf8.encode(options.data.toString());
+      final payload = options.data is List<int> ? options.data : utf8.encode(jsonEncode(options.data));
 
       final result = await _hpke.seal(plaintext: payload, recipientPub: serverPublicKey, aad: aad);
 

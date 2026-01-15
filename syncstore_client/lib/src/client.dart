@@ -156,7 +156,7 @@ class SyncStoreClient {
   /// delete data by id
   Future<void> delete(String namespace, String collection, String id) {
     return perform(() async {
-      await _dio.delete('/data/$namespace/$collection/$id', options: _buildOptions());
+      await _dio.delete('/data/$namespace/$collection/$id', options: _buildOptions(skipHpke: true));
     });
   }
 
@@ -203,7 +203,7 @@ class SyncStoreClient {
 
   Future<void> deleteAcls(String namespace, String collection, String id) {
     return perform(() async {
-      await _dio.delete('/acl/$namespace/$collection/$id', options: _buildOptions());
+      await _dio.delete('/acl/$namespace/$collection/$id', options: _buildOptions(skipHpke: true));
     });
   }
 }
