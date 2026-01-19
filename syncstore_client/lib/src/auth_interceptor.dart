@@ -42,7 +42,7 @@ class AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     // auth request should not trigger refresh
-    if (err.requestOptions.extra['skipAuthInterceptor'] == true || err.requestOptions.extra['secureHpke'] == true) {
+    if (err.requestOptions.extra['skipAuthInterceptor'] == true) {
       handler.next(err);
       return;
     }
