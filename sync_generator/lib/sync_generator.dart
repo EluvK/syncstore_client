@@ -26,6 +26,7 @@ class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
     buffer.writeln(_generateExtension(className, extName, tableName, dbType));
     buffer.writeln('typedef $dataItemType = DataItem<$className>;\n');
     buffer.writeln(_generateRepository(className, repositoryType, dataItemType, extName));
+    buffer.writeln(_generateFilterSubscriptionClass(dataItemType));
     buffer.writeln(
       _generateController(className, controllerType, dataItemType, repositoryType, syncEngineType, activeItemId),
     );
@@ -132,6 +133,16 @@ class $repositoryType {
 ''';
   }
 
+  String _generateFilterSubscriptionClass(String dataItemType) {
+    return '''
+class _${dataItemType}FilterSubscription {
+  final RxList<$dataItemType> filteredList;
+  final Worker worker;
+  _${dataItemType}FilterSubscription(this.filteredList, this.worker);
+}
+''';
+  }
+
   String _generateController(
     String className,
     String controllerType,
@@ -147,6 +158,7 @@ class $controllerType extends GetxController {
   $controllerType(this.client) : _syncEngine = $syncEngineType(client);
 
   final RxList<$dataItemType> _items = <$dataItemType>[].obs;
+  final Map<String, _${dataItemType}FilterSubscription> _dynamicSubscription = {};
   final Rx<String?> $activeItemId = Rx<String?>(null);
 
   @override
@@ -163,6 +175,31 @@ class $controllerType extends GetxController {
     }
     return;
   }
+  @override
+  void onClose() {
+    for (var sub in _dynamicSubscription.values) {
+      sub.worker.dispose();
+    }
+    _dynamicSubscription.clear();
+    super.onClose();
+  }
+  RxList<$dataItemType> registerFilterSubscription({required String filterKey, List<DataItemFilter> filters = const []}) {
+    if (_dynamicSubscription.containsKey(filterKey)) {
+      return _dynamicSubscription[filterKey]!.filteredList;
+    }
+    final newList = _items.where((item) => filters.every((filter) => filter.apply(item))).toList().obs;
+    final worker = debounce(_items, (List<$dataItemType> value) {
+      final newFiltered = value.where((item) => filters.every((filter) => filter.apply(item))).toList();
+      newList.assignAll(newFiltered);
+    }, time: const Duration(milliseconds: 100));
+    _dynamicSubscription[filterKey] = _${dataItemType}FilterSubscription(newList, worker);
+    return newList;
+  }
+  void unregisterFilterSubscription(String filterKey) {
+    final sub = _dynamicSubscription.remove(filterKey);
+    sub?.worker.dispose();
+  }
+
   Future<void> rebuildLocal() async {
     _items.value = await $repositoryType().listFromLocalDb();
   }
