@@ -130,8 +130,10 @@ class ListResponse {
 enum AccessLevel {
   none, // `none` only exist at client side to make UI easier
   read,
+  read_append1,
+  read_append2,
+  read_append3,
   update,
-  create,
   write,
   fullAccess,
 }
