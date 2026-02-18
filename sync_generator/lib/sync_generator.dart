@@ -31,7 +31,7 @@ class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
       _generateController(className, controllerType, dataItemType, repositoryType, syncEngineType, activeItemId),
     );
     if (generateAcl) {
-      buffer.writeln(_generateAclExtension(repositoryType, controllerType, extName, tableName));
+      buffer.writeln(_generateAclExtension(repositoryType, controllerType, extName, collectionName, tableName));
     }
     buffer.writeln(
       _generateSyncEngine(className, syncEngineType, dataItemType, repositoryType, collectionName, tableName),
@@ -438,7 +438,13 @@ class $syncEngineType {
 ''';
   }
 
-  String _generateAclExtension(String repositoryType, String controllerType, String extName, String tableName) {
+  String _generateAclExtension(
+    String repositoryType,
+    String controllerType,
+    String extName,
+    String collectionName,
+    String tableName,
+  ) {
     return '''
 extension ${repositoryType}Acl on $repositoryType {
   static String get tableNameAcl => 'acl';
@@ -467,9 +473,22 @@ extension ${repositoryType}Acl on $repositoryType {
   }
 }
 extension ${controllerType}Acl on ${controllerType} {
-  Future<List<Permission>> getAcls(String dataId) async {
+  Future<void> syncAcls() async {
     try {
-      final List<Permission> getAcls = await client.getAcls('xbb', '$tableName', dataId);
+      for (var item in _items) {
+        final serviceAcls = await client.getAcls('$collectionName', '$tableName', item.id);
+        await $repositoryType().setAcls(item.id, serviceAcls);
+      }
+    } catch (e) {
+      print("Error syncing ACLs: \$e");
+    }
+  }
+  Future<List<Permission>> getAclLocal(String dataId) async {
+    return await $repositoryType().getAcls(dataId);
+  }
+  Future<List<Permission>> getAclRefresh(String dataId) async {
+    try {
+      final List<Permission> getAcls = await client.getAcls('$collectionName', '$tableName', dataId);
       await ${repositoryType}().setAcls(dataId, getAcls);
       return getAcls;
     } catch (e) {
@@ -479,7 +498,7 @@ extension ${controllerType}Acl on ${controllerType} {
   }
   Future<void> setAcls(String dataId, List<Permission> permissions) async {
     try {
-      await client.updateAcls('xbb', '$tableName', dataId, permissions);
+      await client.updateAcls('$collectionName', '$tableName', dataId, permissions);
       await ${repositoryType}().setAcls(dataId, permissions);
     } catch (e) {
       print("Error updating ACLs to server: \$e");
