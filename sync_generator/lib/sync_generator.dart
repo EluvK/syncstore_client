@@ -250,8 +250,14 @@ class $controllerType extends GetxController {
       _replaceLocal(updatedItem.id, fetchedItem);
     });
   }
-  void onUpdateLocalField(String id) {
+  void onUpdateLocalField(String id, {ColorTag? colorTag, SyncStatus? syncStatus}) {
     final item = _items.firstWhere((item) => item.id == id);
+    if (colorTag != null) {
+      item.colorTag = colorTag;
+    }
+    if (syncStatus != null) {
+      item.syncStatus = syncStatus;
+    }
     $repositoryType().updateToLocalDb(item);
   }
   void deleteData(String id, {bool deleteFromServer = false}) {
