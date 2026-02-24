@@ -18,6 +18,7 @@ dependencies:
   sync_annotation:
     path: ../sync_annotation
   uuid: ^4.5.1
+  pool: ^1.5.2
 
 dev_dependencies:
   build_runner: ^2.10.4

@@ -1,6 +1,7 @@
 library syncstore_client;
 
 export 'src/auth_interceptor.dart';
+export 'src/chunk_interceptor.dart';
 export 'src/client.dart';
 export 'src/errors.dart';
 export 'src/filter.dart';

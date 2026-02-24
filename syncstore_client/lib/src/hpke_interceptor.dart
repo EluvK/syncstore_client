@@ -269,6 +269,7 @@ class HpkeInterceptor extends Interceptor {
       final payload = options.data is List<int> ? options.data : utf8.encode(jsonEncode(options.data));
 
       final result = await _hpke.seal(plaintext: payload, recipientPub: serverPublicKey, aad: aad);
+      print("HpkeInterceptor/onRequest: request encrypted done: length ${result.$2.length} bytes");
 
       // 3. set headers according to Rust logic
       options.headers['X-Enc'] = base64Encode(result.$1); // encapsulated public key

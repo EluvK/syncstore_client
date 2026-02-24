@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'auth_interceptor.dart';
+import 'chunk_interceptor.dart';
 import 'hpke_interceptor.dart';
 import 'token_storage.dart';
 import 'models.dart';
@@ -29,6 +30,7 @@ class SyncStoreClient {
       tokenStorage.getHpkePubKey().then((publicKey) {
         if (publicKey != null) {
           client.interceptors.add(HpkeInterceptor(publicKey));
+          client.interceptors.add(ConcurrentChunkInterceptor());
         }
       });
     }
@@ -43,6 +45,7 @@ class SyncStoreClient {
     }
     if (enableHpke && !skipHpke && _dio.interceptors.any((element) => element is HpkeInterceptor)) {
       extra['secureHpke'] = true;
+      extra['isChunked'] = true; // 只有启用HPKE才启用分片上传
       responseType = ResponseType.bytes;
     }
     return Options(extra: extra, responseType: responseType);
@@ -275,6 +278,7 @@ ApiException _wrapDioException(DioException e) {
     final status = e.response!.statusCode ?? 0;
     final data = e.response!.data;
     print('Error with response data: $data');
+    print('Error with response status: $status');
     if (status == 401) return ApiException(ApiError.loginRequired, data.toString());
     if (status == 403) return ApiException(ApiError.permissionDenied, data.toString());
     if (status == 400) return ApiException(ApiError.validationError, data.toString());
