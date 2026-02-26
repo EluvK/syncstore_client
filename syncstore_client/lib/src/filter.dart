@@ -1,16 +1,29 @@
+import 'package:equatable/equatable.dart';
 import 'package:syncstore_client/src/models.dart' show SyncStatus, DataItem, ColorTag;
 
 abstract interface class DataItemFilter<T> {
   bool apply(DataItem<T> item);
 }
 
-abstract class DataItemBodyFilter<T> implements DataItemFilter<T> {
+abstract class EquatableFilter<T> extends Equatable implements DataItemFilter<T> {
+  const EquatableFilter();
+
+  // all class must implement props to make Equatable work
+  @override
+  abstract final List<Object?> props;
+}
+
+abstract class DataItemBodyEquatableFilter<T> extends Equatable implements DataItemFilter<T> {
+  const DataItemBodyEquatableFilter();
   bool applyBody(T body);
   @override
   bool apply(DataItem<T> item) => applyBody(item.body);
+
+  @override
+  abstract final List<Object?> props;
 }
 
-class ParentIdFilter implements DataItemFilter {
+class ParentIdFilter extends EquatableFilter {
   final String parentId;
   ParentIdFilter(this.parentId);
 
@@ -18,9 +31,12 @@ class ParentIdFilter implements DataItemFilter {
   bool apply(DataItem<dynamic> item) {
     return item.parentId == parentId;
   }
+
+  @override
+  List<Object?> get props => [parentId];
 }
 
-class IdsFilter implements DataItemFilter {
+class IdsFilter extends EquatableFilter {
   final List<String> ids;
   IdsFilter(this.ids);
 
@@ -28,6 +44,9 @@ class IdsFilter implements DataItemFilter {
   bool apply(DataItem<dynamic> item) {
     return ids.contains(item.id);
   }
+
+  @override
+  List<Object?> get props => [ids];
 }
 
 enum StatusFilter implements DataItemFilter {
@@ -95,7 +114,7 @@ enum ColorTagFilter implements DataItemFilter {
   }
 }
 
-class OrFilter<T> implements DataItemFilter<T> {
+class OrFilter<T> extends EquatableFilter<T> {
   final Iterable<DataItemFilter<T>> filters;
   OrFilter(this.filters);
 
@@ -108,4 +127,7 @@ class OrFilter<T> implements DataItemFilter<T> {
     }
     return false;
   }
+
+  @override
+  List<Object?> get props => [filters];
 }

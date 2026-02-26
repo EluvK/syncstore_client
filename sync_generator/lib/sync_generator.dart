@@ -137,8 +137,9 @@ class $repositoryType {
     return '''
 class _${dataItemType}FilterSubscription {
   final RxList<$dataItemType> filteredList;
+  final List<DataItemFilter> appliedFilters;
   final Worker worker;
-  _${dataItemType}FilterSubscription(this.filteredList, this.worker);
+  _${dataItemType}FilterSubscription(this.filteredList, this.appliedFilters, this.worker);
 }
 ''';
   }
@@ -184,15 +185,17 @@ class $controllerType extends GetxController {
     super.onClose();
   }
   RxList<$dataItemType> registerFilterSubscription({required String filterKey, List<DataItemFilter> filters = const []}) {
-    if (_dynamicSubscription.containsKey(filterKey)) {
-      return _dynamicSubscription[filterKey]!.filteredList;
+    final existing = _dynamicSubscription[filterKey];
+    if (existing != null && listEquals(existing.appliedFilters, filters)) {
+      return existing.filteredList;
     }
     final newList = _items.where((item) => filters.every((filter) => filter.apply(item))).toList().obs;
+    existing?.worker.dispose();
     final worker = debounce(_items, (List<$dataItemType> value) {
       final newFiltered = value.where((item) => filters.every((filter) => filter.apply(item))).toList();
       newList.assignAll(newFiltered);
     }, time: const Duration(milliseconds: 100));
-    _dynamicSubscription[filterKey] = _${dataItemType}FilterSubscription(newList, worker);
+    _dynamicSubscription[filterKey] = _${dataItemType}FilterSubscription(newList, filters, worker);
     return newList;
   }
   void unregisterFilterSubscription(String filterKey) {
@@ -202,6 +205,7 @@ class $controllerType extends GetxController {
 
   Future<void> rebuildLocal() async {
     _items.value = await $repositoryType().listFromLocalDb();
+    _items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
   void onSelect$className(String id) {
     $activeItemId.value = id;

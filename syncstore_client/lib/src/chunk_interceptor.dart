@@ -71,7 +71,7 @@ class ConcurrentChunkInterceptor extends Interceptor {
       }).toList();
       final finalResponse = allResponses.lastWhere((res) => res.statusCode != 202, orElse: () => allResponses.last);
       // sleep for a while to wait for server to finalize the upload
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(Duration(milliseconds: 100 * totalChunks));
       handler.resolve(finalResponse);
     } catch (e) {
       handler.reject(DioException(requestOptions: options, error: e.toString()));
