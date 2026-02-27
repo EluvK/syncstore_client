@@ -62,15 +62,20 @@ class AuthInterceptor extends Interceptor {
             handler.next(err);
             return;
           }
+          final newExtra = Map<String, dynamic>.from(requestOptions.extra)..['__retried'] = true;
           final opts = Options(
             method: requestOptions.method,
             headers: Map<String, dynamic>.from(requestOptions.headers)..['Authorization'] = 'Bearer $newToken',
+            extra: newExtra,
+            responseType: requestOptions.responseType,
+            contentType: requestOptions.contentType,
           );
+          final originalData = requestOptions.extra['__raw_data'] ?? requestOptions.data;
           final cloneReq = await _authService.dio.request(
             requestOptions.path,
-            data: requestOptions.data,
+            data: originalData,
             queryParameters: requestOptions.queryParameters,
-            options: opts..extra?.addAll({'__retried': true}),
+            options: opts,
             cancelToken: requestOptions.cancelToken,
             onReceiveProgress: requestOptions.onReceiveProgress,
             onSendProgress: requestOptions.onSendProgress,
