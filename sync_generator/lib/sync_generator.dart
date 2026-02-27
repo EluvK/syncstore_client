@@ -210,6 +210,15 @@ class $controllerType extends GetxController {
   void onSelect$className(String id) {
     $activeItemId.value = id;
   }
+  DataItem<$className>? get$className(String id) {
+    return _items.firstWhereOrNull((item) => item.id == id);
+  }
+  List<T> get${className}Details<T>({
+    List<DataItemFilter> filters = const [],
+    required T Function($dataItemType item) selector,
+  }) {
+    return _items.where((item) => filters.every((filter) => filter.apply(item))).map(selector).toList();
+  }
   List<$dataItemType> onView${className}s({List<DataItemFilter> filters = const []}) {
     if (filters.isEmpty) {
       return _items;

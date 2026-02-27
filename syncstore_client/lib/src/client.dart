@@ -276,12 +276,12 @@ ApiException _wrapDioException(DioException e) {
   }
   if (e.response != null) {
     final status = e.response!.statusCode ?? 0;
-    final data = e.response!.data;
+    final data = try_decode_data(e.response!.data);
     print('Error with response data: $data');
     print('Error with response status: $status');
-    if (status == 401) return ApiException(ApiError.loginRequired, data.toString());
-    if (status == 403) return ApiException(ApiError.permissionDenied, data.toString());
-    if (status == 400) return ApiException(ApiError.validationError, data.toString());
+    if (status == 401) return ApiException(ApiError.loginRequired, data);
+    if (status == 403) return ApiException(ApiError.permissionDenied, data);
+    if (status == 400) return ApiException(ApiError.validationError, data);
   }
   return ApiException(ApiError.unknown);
 }
@@ -292,5 +292,15 @@ Future<T> perform<T>(Future<T> Function() f) async {
     return await f();
   } on DioException catch (e) {
     throw _wrapDioException(e);
+  }
+}
+
+String try_decode_data(dynamic data) {
+  if (data is String) {
+    return data;
+  } else if (data is List<int>) {
+    return String.fromCharCodes(data);
+  } else {
+    return data.toString();
   }
 }
