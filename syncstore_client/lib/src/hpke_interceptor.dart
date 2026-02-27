@@ -256,7 +256,7 @@ class HpkeInterceptor extends Interceptor {
     }
     print("HpkeInterceptor/onRequest: encrypting request for ${options.method} ${options.path}");
 
-    options.extra['__raw_data'] = options.data;
+    options.extra['__raw_data'] ??= options.data;
 
     try {
       // 1. generate a session unique key pair for this request
