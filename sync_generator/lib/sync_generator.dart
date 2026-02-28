@@ -28,7 +28,15 @@ class RepositoryGenerator extends GeneratorForAnnotation<Repository> {
     buffer.writeln(_generateRepository(className, repositoryType, dataItemType, extName));
     buffer.writeln(_generateFilterSubscriptionClass(dataItemType));
     buffer.writeln(
-      _generateController(className, controllerType, dataItemType, repositoryType, syncEngineType, activeItemId),
+      _generateController(
+        className,
+        controllerType,
+        dataItemType,
+        repositoryType,
+        syncEngineType,
+        activeItemId,
+        generateAcl,
+      ),
     );
     if (generateAcl) {
       buffer.writeln(_generateAclExtension(repositoryType, controllerType, extName, collectionName, tableName));
@@ -151,7 +159,16 @@ class _${dataItemType}FilterSubscription {
     String repositoryType,
     String syncEngineType,
     String activeItemId,
+    bool generateAcl,
   ) {
+    String aclInitLogic = generateAcl
+        ? '''
+// preload ACLs for all items to make sure UI can get ACL info immediately
+// this can be optimized by only load ACL when needed and cache it.
+for (var item in _items) {
+  await getAclLocal(item.id);
+}'''
+        : '';
     return '''
 class $controllerType extends GetxController {
   final SyncStoreClient client;
@@ -159,12 +176,14 @@ class $controllerType extends GetxController {
   $controllerType(this.client) : _syncEngine = $syncEngineType(client);
 
   final RxList<$dataItemType> _items = <$dataItemType>[].obs;
+  ${generateAcl ? 'final RxMap<String, List<Permission>> _aclCache = <String, List<Permission>>{}.obs;' : ''}
   final Map<String, _${dataItemType}FilterSubscription> _dynamicSubscription = {};
   final Rx<String?> $activeItemId = Rx<String?>(null);
 
   @override
   Future<void> onInit() async {
     await rebuildLocal();
+    ${aclInitLogic}
     super.onInit();
     _initialized = true;
   }
@@ -497,18 +516,23 @@ extension ${controllerType}Acl on ${controllerType} {
       for (var item in _items) {
         final serviceAcls = await client.getAcls('$collectionName', '$tableName', item.id);
         await $repositoryType().setAcls(item.id, serviceAcls);
+        _aclCache[item.id] = serviceAcls;
       }
     } catch (e) {
       print("Error syncing ACLs: \$e");
     }
   }
   Future<List<Permission>> getAclLocal(String dataId) async {
-    return await $repositoryType().getAcls(dataId);
+    final localAcls = await $repositoryType().getAcls(dataId);
+    _aclCache[dataId] = localAcls;
+    return localAcls;
   }
+  List<Permission> getAclCached(String dataId) => _aclCache[dataId] ?? [];
   Future<List<Permission>> getAclRefresh(String dataId) async {
     try {
       final List<Permission> getAcls = await client.getAcls('$collectionName', '$tableName', dataId);
       await ${repositoryType}().setAcls(dataId, getAcls);
+      _aclCache[dataId] = getAcls;
       return getAcls;
     } catch (e) {
       print("Error fetching ACLs from server: \$e");
@@ -519,6 +543,7 @@ extension ${controllerType}Acl on ${controllerType} {
     try {
       await client.updateAcls('$collectionName', '$tableName', dataId, permissions);
       await ${repositoryType}().setAcls(dataId, permissions);
+      _aclCache[dataId] = permissions;
     } catch (e) {
       print("Error updating ACLs to server: \$e");
     }

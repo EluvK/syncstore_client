@@ -157,3 +157,39 @@ CREATE TABLE IF NOT EXISTS acl (
   permissions TEXT NOT NULL
 );
 """;
+
+/// this part should keep the same as syncstore server implementation
+class ACLMask {
+  static const int readOnly = 0x01; // 000001
+  static const int updateOnly = 0x02; // 000010
+  static const int deleteOnly = 0x04; // 000100
+  static const int append3Below = 0x08; // 001000
+  static const int append2Below = 0x18; // 011000 (包含 bit 3)
+  static const int append1Below = 0x38; // 111000 (包含 bit 3, 4)
+  static const int fullAccess = 0x3F; // 111111
+
+  static int fromAccessLevel(AccessLevel level) {
+    switch (level) {
+      case AccessLevel.read:
+        return readOnly;
+      case AccessLevel.read_append1:
+        return readOnly | append1Below;
+      case AccessLevel.read_append2:
+        return readOnly | append2Below;
+      case AccessLevel.read_append3:
+        return readOnly | append3Below;
+      case AccessLevel.update:
+        return readOnly | updateOnly;
+      case AccessLevel.write:
+        return readOnly | updateOnly | append1Below;
+      case AccessLevel.fullAccess:
+        return fullAccess;
+      case AccessLevel.none:
+        return 0;
+    }
+  }
+
+  static bool has(int currentMask, int requiredBit) {
+    return (currentMask & requiredBit) == requiredBit;
+  }
+}
