@@ -203,6 +203,14 @@ class $controllerType extends GetxController {
     _dynamicSubscription.clear();
     super.onClose();
   }
+  /// ALERT: this will delete all local data, use with caution.
+  Future<void> clearLocal() async {
+    final ids = _items.map((e) => e.id).toList();
+    for (var id in ids) {
+      await $repositoryType().deleteFromLocalDb(id);
+    }
+    await rebuildLocal();
+  }
   RxList<$dataItemType> registerFilterSubscription({required String filterKey, List<DataItemFilter> filters = const []}) {
     final existing = _dynamicSubscription[filterKey];
     if (existing != null && listEquals(existing.appliedFilters, filters)) {
