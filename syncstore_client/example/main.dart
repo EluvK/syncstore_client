@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart';
 import 'package:json_annotation/json_annotation.dart';

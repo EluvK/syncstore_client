@@ -106,8 +106,9 @@ class RepoRepository {
 
 class _RepoDataItemFilterSubscription {
   final RxList<RepoDataItem> filteredList;
+  final List<DataItemFilter> appliedFilters;
   final Worker worker;
-  _RepoDataItemFilterSubscription(this.filteredList, this.worker);
+  _RepoDataItemFilterSubscription(this.filteredList, this.appliedFilters, this.worker);
 }
 
 class RepoController extends GetxController {
@@ -116,12 +117,14 @@ class RepoController extends GetxController {
   RepoController(this.client) : _syncEngine = _RepoSyncEngine(client);
 
   final RxList<RepoDataItem> _items = <RepoDataItem>[].obs;
+
   final Map<String, _RepoDataItemFilterSubscription> _dynamicSubscription = {};
   final Rx<String?> currentRepoId = Rx<String?>(null);
 
   @override
   Future<void> onInit() async {
     await rebuildLocal();
+
     super.onInit();
     _initialized = true;
   }
@@ -143,19 +146,30 @@ class RepoController extends GetxController {
     super.onClose();
   }
 
+  /// ALERT: this will delete all local data, use with caution.
+  Future<void> clearLocal() async {
+    final ids = _items.map((e) => e.id).toList();
+    for (var id in ids) {
+      await RepoRepository().deleteFromLocalDb(id);
+    }
+    await rebuildLocal();
+  }
+
   RxList<RepoDataItem> registerFilterSubscription({
     required String filterKey,
     List<DataItemFilter> filters = const [],
   }) {
-    if (_dynamicSubscription.containsKey(filterKey)) {
-      return _dynamicSubscription[filterKey]!.filteredList;
+    final existing = _dynamicSubscription[filterKey];
+    if (existing != null && listEquals(existing.appliedFilters, filters)) {
+      return existing.filteredList;
     }
     final newList = _items.where((item) => filters.every((filter) => filter.apply(item))).toList().obs;
+    existing?.worker.dispose();
     final worker = debounce(_items, (List<RepoDataItem> value) {
       final newFiltered = value.where((item) => filters.every((filter) => filter.apply(item))).toList();
       newList.assignAll(newFiltered);
     }, time: const Duration(milliseconds: 100));
-    _dynamicSubscription[filterKey] = _RepoDataItemFilterSubscription(newList, worker);
+    _dynamicSubscription[filterKey] = _RepoDataItemFilterSubscription(newList, filters, worker);
     return newList;
   }
 
@@ -166,10 +180,22 @@ class RepoController extends GetxController {
 
   Future<void> rebuildLocal() async {
     _items.value = await RepoRepository().listFromLocalDb();
+    _items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void onSelectRepo(String id) {
     currentRepoId.value = id;
+  }
+
+  DataItem<Repo>? getRepo(String id) {
+    return _items.firstWhereOrNull((item) => item.id == id);
+  }
+
+  List<T> getRepoDetails<T>({
+    List<DataItemFilter> filters = const [],
+    required T Function(RepoDataItem item) selector,
+  }) {
+    return _items.where((item) => filters.every((filter) => filter.apply(item))).map(selector).toList();
   }
 
   List<RepoDataItem> onViewRepos({List<DataItemFilter> filters = const []}) {
@@ -223,8 +249,14 @@ class RepoController extends GetxController {
     });
   }
 
-  void onUpdateLocalField(String id) {
+  void onUpdateLocalField(String id, {ColorTag? colorTag, SyncStatus? syncStatus}) {
     final item = _items.firstWhere((item) => item.id == id);
+    if (colorTag != null) {
+      item.colorTag = colorTag;
+    }
+    if (syncStatus != null) {
+      item.syncStatus = syncStatus;
+    }
     RepoRepository().updateToLocalDb(item);
   }
 

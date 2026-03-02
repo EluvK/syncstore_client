@@ -252,6 +252,9 @@ class $controllerType extends GetxController {
     }
     return _items.where((item) => filters.every((filter) => filter.apply(item))).toList();
   }
+  Future<void> syncAll({int batchSize = 20}) async {
+    await _syncEngine.syncAllData(batchSize: batchSize);
+  }
   Future<void> syncChildren(String parentId) async {
     await _syncEngine.syncChildren(parentId);
   }
@@ -373,13 +376,78 @@ class $syncEngineType {
       rethrow;
     }
   }
+
+  Future<void> syncAllData({int batchSize = 20}) async {
+    final currentUserId = client.currentUserId();
+    try {
+      String? nextMarker;
+      final serviceIds = <String>{};
+      final needGetIds = <String>{};
+      // 1. list all data ids from server, and compare with local data to find out which data need to fetch details and which data are deleted from server.
+      do {
+        final ListResponse resp = await client.list('$collectionName', '$tableName', withPermission: true, limit: 200, marker: nextMarker);
+        nextMarker = resp.pageInfo.nextMarker;
+        for (var summary in resp.items) {
+          serviceIds.add(summary.id);
+          final $dataItemType? localItem = await $repositoryType().getFromLocalDb(summary.id);
+          if (localItem == null || localItem.updatedAt.isBefore(summary.updatedAt)) {
+            // only get details for new created or updated items, otherwise just skip to save performance.
+            needGetIds.add(summary.id);
+          } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
+            // local data is newer, need to sync to server
+            localItem.syncStatus = SyncStatus.failed;
+            await $repositoryType().updateToLocalDb(localItem);
+          } else if (localItem.syncStatus == SyncStatus.deleted || localItem.syncStatus == SyncStatus.hidden) {
+            // same updatedAt but marked as special status, need to sync to server
+            localItem.syncStatus = SyncStatus.archived;
+            await $repositoryType().updateToLocalDb(localItem);
+          }
+        }
+      } while (nextMarker != null);
+      // 2. clean up local data that are deleted from server
+      final localItems = await $repositoryType().listFromLocalDb();
+      for ($dataItemType localItem in localItems) {
+        if (localItem.owner != currentUserId) {
+          continue;
+        }
+        if (!serviceIds.contains(localItem.id)) {
+          localItem.syncStatus = SyncStatus.deleted;
+          await $repositoryType().updateToLocalDb(localItem);
+        }
+      }
+
+      // 3. batch get details for items that need to be updated or created locally
+      final needGetIdsList = needGetIds.toList();
+      for (var i = 0; i < needGetIdsList.length;) {
+        final batchIds = needGetIdsList.skip(i).take(batchSize).toList();
+        final batchItems = await client.batchGet('$collectionName', '$tableName', batchIds, $className.fromJson);
+        for (var item in batchItems.items) {
+          await $repositoryType().upsertToLocalDb(item);
+        }
+        final truncated = batchItems.truncated;
+        if (truncated != null) {
+          i = needGetIdsList.indexOf(truncated);
+          if (i == -1) {
+            // just in case, if truncated id is not found in the list, fallback to next batch.
+            i += batchSize;
+          }
+        } else {
+          i += batchSize;
+        }
+      }
+    } catch (e) {
+      // todo more error handling?
+      rethrow;
+    }
+  }
+
   Future<void> syncOwned() async {
     final currentUserId = client.currentUserId();
     try {
       String? nextMarker;
       final serviceIds = <String>{};
       do {
-        final ListResponse resp = await client.list('$collectionName', '$tableName', limit: 50, marker: nextMarker);
+        final ListResponse resp = await client.list('$collectionName', '$tableName', limit: 200, marker: nextMarker);
         nextMarker = resp.pageInfo.nextMarker;
         for (var summary in resp.items) {
           serviceIds.add(summary.id);
@@ -409,7 +477,7 @@ class $syncEngineType {
       String? nextMarker;
       final serviceIds = <String>{};
       do {
-        final ListResponse resp = await client.list('$collectionName', '$tableName', withPermission: true, limit: 50, marker: nextMarker);
+        final ListResponse resp = await client.list('$collectionName', '$tableName', withPermission: true, limit: 200, marker: nextMarker);
         nextMarker = resp.pageInfo.nextMarker;
         for (var summary in resp.items) {
           serviceIds.add(summary.id);
@@ -439,7 +507,7 @@ class $syncEngineType {
       String? nextMarker;
       final serviceIds = <String>{};
       do {
-        final ListResponse resp = await client.list('$collectionName', '$tableName', parentId: parentId, limit: 50, marker: nextMarker);
+        final ListResponse resp = await client.list('$collectionName', '$tableName', parentId: parentId, limit: 200, marker: nextMarker);
         nextMarker = resp.pageInfo.nextMarker;
         for (var summary in resp.items) {
           serviceIds.add(summary.id);

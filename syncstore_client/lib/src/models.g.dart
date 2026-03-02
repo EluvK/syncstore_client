@@ -112,6 +112,20 @@ Map<String, dynamic> _$ListResponseToJson(ListResponse instance) => <String, dyn
   'page_info': instance.pageInfo,
 };
 
+BatchGetResponse<T> _$BatchGetResponseFromJson<T>(Map<String, dynamic> json, T Function(Object? json) fromJsonT) =>
+    BatchGetResponse<T>(
+      items: (json['items'] as List<dynamic>)
+          .map((e) => DataItem<T>.fromJson(e as Map<String, dynamic>, (value) => fromJsonT(value)))
+          .toList(),
+      truncated: json['truncated'] as String?,
+    );
+
+Map<String, dynamic> _$BatchGetResponseToJson<T>(BatchGetResponse<T> instance, Object? Function(T value) toJsonT) =>
+    <String, dynamic>{
+      'items': instance.items.map((e) => e.toJson((value) => toJsonT(value))).toList(),
+      'truncated': instance.truncated,
+    };
+
 Permission _$PermissionFromJson(Map<String, dynamic> json) =>
     Permission(user: json['user'] as String, accessLevel: $enumDecode(_$AccessLevelEnumMap, json['access_level']));
 

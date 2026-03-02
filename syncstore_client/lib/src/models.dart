@@ -126,6 +126,19 @@ class ListResponse {
   Map<String, dynamic> toJson() => _$ListResponseToJson(this);
 }
 
+@JsonSerializable(fieldRename: FieldRename.snake, genericArgumentFactories: true)
+class BatchGetResponse<T> {
+  final List<DataItem<T>> items;
+  final String? truncated;
+
+  BatchGetResponse({required this.items, this.truncated});
+
+  factory BatchGetResponse.fromJson(Map<String, dynamic> json, T Function(Object?) fromJsonT) =>
+      _$BatchGetResponseFromJson(json, fromJsonT);
+  Map<String, dynamic> toJson(Object? Function(T value) toJsonT) => _$BatchGetResponseToJson(this, toJsonT);
+
+}
+
 @JsonEnum(fieldRename: FieldRename.snake)
 enum AccessLevel {
   none, // `none` only exist at client side to make UI easier

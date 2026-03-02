@@ -134,6 +134,19 @@ class SyncStoreClient {
     });
   }
 
+  Future<BatchGetResponse<T>> batchGet<T extends Object>(
+    String namespace,
+    String collection,
+    List<String> ids,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
+    return perform(() async {
+      final resp = await _dio.post('/batch-data/$namespace/$collection', data: {'ids': ids}, options: _buildOptions());
+      final data = resp.data as Map<String, dynamic>;
+      return BatchGetResponse.fromJson(data, (json) => fromJson(json as Map<String, dynamic>));
+    });
+  }
+
   /// get data by id
   Future<DataItem<T>> get<T extends Object>(
     String namespace,
