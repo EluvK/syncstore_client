@@ -141,9 +141,32 @@ class SyncStoreClient {
     T Function(Map<String, dynamic>) fromJson,
   ) {
     return perform(() async {
-      final resp = await _dio.post('/batch-data/$namespace/$collection', data: {'ids': ids}, options: _buildOptions());
+      final resp = await _dio.post(
+        '/batch-data/$namespace/$collection/by_ids',
+        data: {'ids': ids},
+        options: _buildOptions(),
+      );
       final data = resp.data as Map<String, dynamic>;
       return BatchGetResponse.fromJson(data, (json) => fromJson(json as Map<String, dynamic>));
+    });
+  }
+
+  Future<ListResponse> batchListChildren(
+    String namespace,
+    String collection,
+    List<String> parentIds, {
+    String? marker,
+  }) {
+    return perform(() async {
+      final query = <String, dynamic>{if (marker != null) 'marker': marker};
+      final resp = await _dio.post(
+        '/batch-data/$namespace/$collection/by_parent_ids',
+        data: {'ids': parentIds},
+        queryParameters: query,
+        options: _buildOptions(),
+      );
+      final data = resp.data as Map<String, dynamic>;
+      return ListResponse.fromJson(data);
     });
   }
 

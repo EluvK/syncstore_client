@@ -255,8 +255,11 @@ class $controllerType extends GetxController {
   Future<void> syncAll({int batchSize = 20}) async {
     await _syncEngine.syncAllData(batchSize: batchSize);
   }
-  Future<void> syncChildren(String parentId) async {
-    await _syncEngine.syncChildren(parentId);
+  Future<void> syncChildren(String parentId, {int batchSize = 20}) async {
+    await _syncEngine.syncChildrenBatch([parentId], batchSize: batchSize);
+  }
+  Future<void> syncMultiChildren(List<String> parentIds, {int batchSize = 20}) async {
+    await _syncEngine.syncChildrenBatch(parentIds, batchSize: batchSize);
   }
   Future<void> syncOwned() async {
     await _syncEngine.syncOwned();
@@ -417,6 +420,70 @@ class $syncEngineType {
       }
 
       // 3. batch get details for items that need to be updated or created locally
+      final needGetIdsList = needGetIds.toList();
+      for (var i = 0; i < needGetIdsList.length;) {
+        final batchIds = needGetIdsList.skip(i).take(batchSize).toList();
+        final batchItems = await client.batchGet('$collectionName', '$tableName', batchIds, $className.fromJson);
+        for (var item in batchItems.items) {
+          await $repositoryType().upsertToLocalDb(item);
+        }
+        final truncated = batchItems.truncated;
+        if (truncated != null) {
+          i = needGetIdsList.indexOf(truncated);
+          if (i == -1) {
+            // just in case, if truncated id is not found in the list, fallback to next batch.
+            i += batchSize;
+          }
+        } else {
+          i += batchSize;
+        }
+      }
+    } catch (e) {
+      // todo more error handling?
+      rethrow;
+    }
+  }
+
+  Future<void> syncChildrenBatch(List<String> parentIds, {int batchSize = 20}) async {
+    try {
+      final needGetIds = <String>{};
+      final serviceIds = <String>{};
+      for (var i = 0; i< parentIds.length; i+=100) {
+        final parentIdsBatch = parentIds.skip(i).take(100).toList();
+        String? nextMarker;
+        do {
+          final ListResponse resp = await client.batchListChildren('$collectionName', '$tableName', parentIdsBatch, marker: nextMarker);
+          nextMarker = resp.pageInfo.nextMarker;
+          for (var summary in resp.items) {
+            serviceIds.add(summary.id);
+            final $dataItemType? localItem = await $repositoryType().getFromLocalDb(summary.id);
+            if (localItem == null || localItem.updatedAt.isBefore(summary.updatedAt)) {
+              // only get details for new created or updated items, otherwise just skip to save performance.
+              needGetIds.add(summary.id);
+            } else if (localItem.updatedAt.isAfter(summary.updatedAt)) {
+              // local data is newer, need to sync to server
+              localItem.syncStatus = SyncStatus.failed;
+              await $repositoryType().updateToLocalDb(localItem);
+            } else if (localItem.syncStatus == SyncStatus.deleted || localItem.syncStatus == SyncStatus.hidden) {
+              // same updatedAt but marked as special status, need to sync to server
+              localItem.syncStatus = SyncStatus.archived;
+              await $repositoryType().updateToLocalDb(localItem);
+            }
+          }
+        } while (nextMarker != null);
+      }
+      // clean up local data that are deleted from server
+      final localItems = await $repositoryType().listFromLocalDb();
+      for ($dataItemType localItem in localItems) {
+        if (localItem.parentId == null || !parentIds.contains(localItem.parentId!)) {
+          continue;
+        }
+        if (!serviceIds.contains(localItem.id)) {
+          localItem.syncStatus = SyncStatus.deleted;
+          await $repositoryType().updateToLocalDb(localItem);
+        }
+      }
+      // batch get details for items that need to be updated or created locally
       final needGetIdsList = needGetIds.toList();
       for (var i = 0; i < needGetIdsList.length;) {
         final batchIds = needGetIdsList.skip(i).take(batchSize).toList();
