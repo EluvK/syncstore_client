@@ -246,11 +246,10 @@ class $controllerType extends GetxController {
   }) {
     return _items.where((item) => filters.every((filter) => filter.apply(item))).map(selector).toList();
   }
-  List<$dataItemType> onView${className}s({List<DataItemFilter> filters = const []}) {
-    if (filters.isEmpty) {
-      return _items;
-    }
-    return _items.where((item) => filters.every((filter) => filter.apply(item))).toList();
+  int get${className}Count<T>({
+    List<DataItemFilter> filters = const [],
+  }) {
+    return _items.where((item) => filters.every((filter) => filter.apply(item))).length;
   }
   Future<void> syncAll({int batchSize = 20}) async {
     await _syncEngine.syncAllData(batchSize: batchSize);

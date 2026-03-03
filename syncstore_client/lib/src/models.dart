@@ -36,7 +36,7 @@ enum ColorTag { none, red, orange, yellow, green, blue, gray }
 
 @JsonSerializable(fieldRename: FieldRename.snake, genericArgumentFactories: true)
 class DataItem<T> {
-  final String id;
+  final String id; 
   final DateTime createdAt;
   final DateTime updatedAt;
   final String owner;

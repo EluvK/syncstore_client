@@ -68,7 +68,7 @@ void main() async {
   await controller.rebuildLocal();
 
   // try update one of the local repos (if any)
-  final viewRepos = controller.onViewRepos();
+  final viewRepos = controller.getRepoDetails(selector: (c) => c);
   if (viewRepos.length > 2) {
     String secondRepoId = viewRepos[1].id;
     print('1. Updated local repo: ${secondRepoId}');
