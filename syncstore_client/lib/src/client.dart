@@ -318,6 +318,7 @@ ApiException _wrapDioException(DioException e) {
     if (status == 401) return ApiException(ApiError.loginRequired, data);
     if (status == 403) return ApiException(ApiError.permissionDenied, data);
     if (status == 400) return ApiException(ApiError.validationError, data);
+    if (status == 404) return ApiException(ApiError.notFound, data);
   }
   return ApiException(ApiError.unknown);
 }

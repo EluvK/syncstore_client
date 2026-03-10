@@ -1,4 +1,6 @@
 enum ApiError {
+  // 404 not found
+  notFound,
   // 403 forbidden
   permissionDenied,
   // 401 unauthorized, should login again
