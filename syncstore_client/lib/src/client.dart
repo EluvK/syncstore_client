@@ -115,6 +115,13 @@ class SyncStoreClient {
     });
   }
 
+  Future<void> addFriend(String friendUserId) {
+    return perform(() async {
+      await _dio.post('/user/friends', data: {'friend_id': friendUserId}, options: _buildOptions());
+      return;
+    });
+  }
+
   Future<List<UserProfile>> getFriends() {
     return perform(() async {
       final resp = await _dio.get('/user/friends', options: _buildOptions());
