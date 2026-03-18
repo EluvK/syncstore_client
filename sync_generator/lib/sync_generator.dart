@@ -166,7 +166,7 @@ class _${dataItemType}FilterSubscription {
 // preload ACLs for all items to make sure UI can get ACL info immediately
 // this can be optimized by only load ACL when needed and cache it.
 for (var item in _items) {
-  await getAclLocal(item.id);
+  await _getAclLocal(item.id);
 }'''
         : '';
     return '''
@@ -664,7 +664,7 @@ extension ${controllerType}Acl on ${controllerType} {
       print("Error syncing ACLs: \$e");
     }
   }
-  Future<List<Permission>> getAclLocal(String dataId) async {
+  Future<List<Permission>> _getAclLocal(String dataId) async {
     final localAcls = await $repositoryType().getAcls(dataId);
     _aclCache[dataId] = localAcls;
     return localAcls;
