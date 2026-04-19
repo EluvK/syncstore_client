@@ -83,11 +83,16 @@ class SyncStoreClient {
     return userId;
   }
 
-  Future<bool> checkHealth() {
-    return perform(() async {
-      final resp = await _dio.get('/health', options: _buildOptions(skipAuth: true, skipHpke: true));
-      return resp.statusCode == 200;
-    });
+  Future<int> pingLatencyMs() async {
+    try {
+      final stopwatch = Stopwatch()..start();
+      await _dio.get('/health', options: _buildOptions(skipAuth: true, skipHpke: true));
+      stopwatch.stop();
+      return stopwatch.elapsedMilliseconds;
+    } catch (_) {
+      // Use -1 to represent unreachable/failed health request.
+      return -1;
+    }
   }
 
   Future<UserProfile> getProfile(String userId) {
